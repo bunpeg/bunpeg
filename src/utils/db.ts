@@ -3,7 +3,7 @@ import { Database } from 'bun:sqlite';
 
 export async function initDb() {
   console.log('-------------- DB init --------------');
-  await $`bun run db:push`;
+  await $`bun run db:push --skip-generate`;
   setWalMode();
   console.log('-------------- DB init end --------------');
 }

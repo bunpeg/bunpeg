@@ -7,7 +7,7 @@
     "dev": "bun --hot src/index.ts",
     "docs:dev": "npx @redocly/cli@latest preview-docs src/www/openapi.yaml",
     "docs:build": "npx @redocly/cli@latest build-docs src/www/openapi.yaml --output=src/www/docs.html",
-    "db:push": "prisma db push",
+    "db:push": "prisma db push --skip-generate",
     "db:studio": "prisma studio"
   },
   "devDependencies": {
