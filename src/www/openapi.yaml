@@ -1,0 +1,182 @@
+openapi: 3.0.3
+info:
+  title: Bunpeg API
+  description: |
+    This API allows users to perform media processing operations using FFmpeg through HTTP endpoints.
+    Users can upload files, request operations like transcoding, trimming, audio extraction, and get results.
+  version: 1.0.0
+
+servers:
+  - url: https://bunpeg-production.up.railway.app/
+
+paths:
+  /upload:
+    post:
+      summary: Upload a media file
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: File uploaded successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  fileId:
+                    type: string
+                  filename:
+                    type: string
+
+  /transcode:
+    post:
+      summary: Transcode a media file to a different format
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fileId, targetFormat]
+              properties:
+                fileId:
+                  type: string
+                  description: ID of the uploaded file
+                targetFormat:
+                  type: string
+                  enum: [mp4, mkv, webm, mov, mp3, wav]
+                  description: Target format for transcoding
+      responses:
+        '200':
+          description: Transcoding started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  taskId:
+                    type: string
+
+  /trim:
+    post:
+      summary: Trim a media file to a specified time range
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fileId, startTime, duration]
+              properties:
+                fileId:
+                  type: string
+                startTime:
+                  type: string
+                  example: "00:00:05"
+                  description: Start time in HH:MM:SS
+                duration:
+                  type: string
+                  example: "00:00:10"
+                  description: Duration from start time
+      responses:
+        '200':
+          description: Trimming started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  taskId:
+                    type: string
+
+  /extract-audio:
+    post:
+      summary: Extract audio from a video file
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fileId, audioFormat]
+              properties:
+                fileId:
+                  type: string
+                audioFormat:
+                  type: string
+                  enum: [mp3, wav, aac]
+      responses:
+        '200':
+          description: Audio extraction started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  taskId:
+                    type: string
+
+  /status/{taskId}:
+    get:
+      summary: Get the status of a processing task
+      parameters:
+        - in: path
+          name: taskId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Task status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  taskId:
+                    type: string
+                  status:
+                    type: string
+                    enum: [queued, processing, completed, failed]
+                  resultUrl:
+                    type: string
+                    nullable: true
+                    description: URL to download result if completed
+
+  /download/{fileId}:
+    get:
+      summary: Download a previously processed file
+      parameters:
+        - in: path
+          name: fileId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Media file
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: File not found
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+security:
+  - ApiKeyAuth: []

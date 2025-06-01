@@ -1,7 +1,9 @@
 import { serve, $ } from "bun";
+import docs from "./www/docs.html";
 
 const server = serve({
   routes: {
+    "/docs": docs,
     "/ffmpeg/version": async (req) => {
       const output = await $`ffmpeg -version`.text();
       const parts = output.split("\n");
