@@ -1,7 +1,8 @@
-import { serve, $, RedisClient } from "bun";
+import { serve, $ } from "bun";
 import fs from "node:fs";
 import { readdir } from "node:fs/promises";
 import { nanoid } from 'nanoid';
+import { Redis } from '@upstash/redis';
 
 import docs from "./www/docs.html";
 import upload from "./www/upload.html";
@@ -12,7 +13,10 @@ const outputDir = "./data/outputs";
 fs.mkdirSync(uploadDir, { recursive: true });
 fs.mkdirSync(outputDir, { recursive: true });
 
-const redis = () => new RedisClient(process.env.REDIS_URL);
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN,
+})
 
 const server = serve({
   routes: {
@@ -34,7 +38,7 @@ const server = serve({
       const extension = parts.pop();
       const extendedName = `${parts.join('.')}-${fileId}.${extension}`;
 
-      await redis().set(fileId, extendedName);
+      await redis.set(fileId, extendedName);
 
       await Bun.write(`${uploadDir}/${extendedName}`, file);
 
@@ -44,11 +48,14 @@ const server = serve({
       const fileId = req.params.fileId;
       if (!fileId) throw new Error('Invalid file id');
 
-      const fileName = await redis().get(fileId);
+      const fileName = await redis.get<string>(fileId);
       if (!fileName) throw new Error('Invalid file id');
+
+      await redis.del(fileId);
 
       const simplifiedName = fileName.replace(`-${fileId}`, '');
       const file = Bun.file(`${uploadDir}/${fileName}`);
+
       return new Response(file, {
         headers: {
           'content-disposition': `attachment; filename="${simplifiedName}"`,
