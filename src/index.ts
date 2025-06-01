@@ -55,7 +55,17 @@ const server = serve({
           'content-disposition': `attachment; filename="${simplifiedName}"`,
         },
       });
-    }
+    },
+    "/wipe": async () => {
+      const files = Array.from(FileStore.entries());
+
+      for (const file of files) {
+        const [_, fileName] = file;
+        await Bun.file(`${uploadDir}/${fileName}`).delete();
+      }
+
+      return new Response(`Volume wiped! (count: ${files.length})`);
+    },
   },
   fetch() {
     return new Response("Hello from bunpeg!");
