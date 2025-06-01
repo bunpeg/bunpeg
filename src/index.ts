@@ -1,11 +1,10 @@
 import { serve, $ } from "bun";
 import fs from "node:fs";
-import { readdir } from "node:fs/promises";
 import { nanoid } from 'nanoid';
-import { Redis } from '@upstash/redis';
 
 import docs from "./www/docs.html";
 import upload from "./www/upload.html";
+import { connectDb, initDb } from './utils/db';
 
 const uploadDir = "./data/uploads";
 const outputDir = "./data/outputs";
@@ -13,10 +12,7 @@ const outputDir = "./data/outputs";
 fs.mkdirSync(uploadDir, { recursive: true });
 fs.mkdirSync(outputDir, { recursive: true });
 
-const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN,
-})
+await initDb();
 
 const server = serve({
   routes: {
@@ -38,7 +34,9 @@ const server = serve({
       const extension = parts.pop();
       const extendedName = `${parts.join('.')}-${fileId}.${extension}`;
 
-      await redis.set(fileId, extendedName);
+      using db = connectDb();
+      using query = db.query('INSERT INTO files (id, file_name, upload_path) VALUES (?, ?, ?)');
+      query.run(fileId, file.name, `${uploadDir}/${extendedName}`);
 
       await Bun.write(`${uploadDir}/${extendedName}`, file);
 
@@ -48,27 +46,39 @@ const server = serve({
       const fileId = req.params.fileId;
       if (!fileId) throw new Error('Invalid file id');
 
-      const fileName = await redis.get<string>(fileId);
-      if (!fileName) throw new Error('Invalid file id');
+      using db = connectDb();
+      using query = db.query<{ file_name: string; upload_path: string }, string>(
+        'SELECT file_name, upload_path FROM files WHERE id = ?'
+      );
+      const dbFile = query.get(fileId);
+      if (!dbFile?.file_name) throw new Error('Invalid file id');
 
-      await redis.del(fileId);
-
-      const simplifiedName = fileName.replace(`-${fileId}`, '');
-      const file = Bun.file(`${uploadDir}/${fileName}`);
+      const file = Bun.file(dbFile.upload_path);
 
       return new Response(file, {
         headers: {
-          'content-disposition': `attachment; filename="${simplifiedName}"`,
+          'content-disposition': `attachment; filename="${dbFile.file_name}"`,
         },
       });
     },
     "/wipe": async () => {
-      const files = await readdir(uploadDir);
-      for (const file of files) {
-        await Bun.file(`${uploadDir}/${file}`).delete();
+      let count = 0;
+      using db = connectDb();
+      using query = db.query<{ upload_path: string }, string>('SELECT upload_path FROM files');
+      for (const file of query) {
+        const localFile = Bun.file(file.upload_path);
+
+        if (await localFile.exists()) {
+          await localFile.delete();
+        }
+
+        count++;
       }
 
-      return new Response(`Volume wiped! (count: ${files.length})`);
+      using delQuery = db.query('DELETE FROM files');
+      delQuery.run();
+
+      return new Response(`Volume wiped! (count: ${count})`);
     },
   },
   fetch() {

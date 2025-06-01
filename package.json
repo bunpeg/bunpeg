@@ -6,16 +6,19 @@
   "scripts": {
     "dev": "bun --hot src/index.ts",
     "docs:dev": "npx @redocly/cli@latest preview-docs src/www/openapi.yaml",
-    "docs:build": "npx @redocly/cli@latest build-docs src/www/openapi.yaml --output=src/www/docs.html"
+    "docs:build": "npx @redocly/cli@latest build-docs src/www/openapi.yaml --output=src/www/docs.html",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio"
   },
   "devDependencies": {
-    "@types/bun": "1.2.15"
+    "@types/bun": "1.2.15",
+    "prisma": "6.8.2"
   },
   "peerDependencies": {
     "typescript": "5.8.3"
   },
   "dependencies": {
-    "@upstash/redis": "1.34.9",
+    "@prisma/client": "^6.8.2",
     "nanoid": "5.1.5"
   }
 }
