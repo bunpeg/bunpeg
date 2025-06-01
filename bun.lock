@@ -3,6 +3,9 @@
   "workspaces": {
     "": {
       "name": "bunpeg",
+      "dependencies": {
+        "nanoid": "5.1.5",
+      },
       "devDependencies": {
         "@types/bun": "1.2.15",
       },
@@ -17,6 +20,8 @@
     "@types/node": ["@types/node@22.15.29", "", { "dependencies": { "undici-types": "~6.21.0" } }, "sha512-LNdjOkUDlU1RZb8e1kOIUpN1qQUlzGkEtbVNo53vbrwDg5om6oduhm4SiUaPW5ASTXhAiP0jInWG8Qx9fVlOeQ=="],
 
     "bun-types": ["bun-types@1.2.15", "", { "dependencies": { "@types/node": "*" } }, "sha512-NarRIaS+iOaQU1JPfyKhZm4AsUOrwUOqRNHY0XxI8GI8jYxiLXLcdjYMG9UKS+fwWasc1uw1htV9AX24dD+p4w=="],
+
+    "nanoid": ["nanoid@5.1.5", "", { "bin": { "nanoid": "bin/nanoid.js" } }, "sha512-Ir/+ZpE9fDsNH0hQ3C68uyThDXzYcim2EqcZ8zn8Chtt1iylPT9xXJB0kPCnqzgcEGikO9RxSrh63MsmVCU7Fw=="],
 
     "typescript": ["typescript@5.8.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-p1diW6TqL9L07nNxvRMM7hMMw4c5XOo/1ibL4aAIGmSAt9slTE1Xgw5KWuof2uTOvCg9BY7ZRi+GaF+7sfgPeQ=="],
 
