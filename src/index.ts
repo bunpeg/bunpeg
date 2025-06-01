@@ -1,5 +1,6 @@
-import { serve, $ } from "bun";
+import { serve, $, RedisClient } from "bun";
 import fs from "node:fs";
+import { readdir } from "node:fs/promises";
 import { nanoid } from 'nanoid';
 
 import docs from "./www/docs.html";
@@ -11,10 +12,7 @@ const outputDir = "./data/outputs";
 fs.mkdirSync(uploadDir, { recursive: true });
 fs.mkdirSync(outputDir, { recursive: true });
 
-/**
- * The key is the **file_id** and the value is the **file_name**
- */
-const FileStore: Map<string, string> = new Map();
+const redis = () => new RedisClient(process.env.REDIS_URL);
 
 const server = serve({
   routes: {
@@ -35,7 +33,8 @@ const server = serve({
       const parts = file.name.split('.');
       const extension = parts.pop();
       const extendedName = `${parts.join('.')}-${fileId}.${extension}`;
-      FileStore.set(fileId, extendedName);
+
+      await redis().set(fileId, extendedName);
 
       await Bun.write(`${uploadDir}/${extendedName}`, file);
 
@@ -45,7 +44,7 @@ const server = serve({
       const fileId = req.params.fileId;
       if (!fileId) throw new Error('Invalid file id');
 
-      const fileName = FileStore.get(fileId);
+      const fileName = await redis().get(fileId);
       if (!fileName) throw new Error('Invalid file id');
 
       const simplifiedName = fileName.replace(`-${fileId}`, '');
@@ -57,11 +56,9 @@ const server = serve({
       });
     },
     "/wipe": async () => {
-      const files = Array.from(FileStore.entries());
-
+      const files = await readdir(uploadDir);
       for (const file of files) {
-        const [_, fileName] = file;
-        await Bun.file(`${uploadDir}/${fileName}`).delete();
+        await Bun.file(`${uploadDir}/${file}`).delete();
       }
 
       return new Response(`Volume wiped! (count: ${files.length})`);
