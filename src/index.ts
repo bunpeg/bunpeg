@@ -1,10 +1,14 @@
 import { serve, $ } from "bun";
-import fs from "node:fs";
+import fs from "fs";
+import path from 'path';
 import { nanoid } from 'nanoid';
 
 import docs from "./www/docs.html";
 import upload from "./www/upload.html";
 import { connectDb, initDb } from './utils/db';
+import { z } from 'zod';
+import { trim } from './utils/ffmpeg.ts';
+import { createTask } from './utils/tasks.ts';
 
 const uploadDir = "./data/uploads";
 const outputDir = "./data/outputs";
@@ -80,6 +84,34 @@ const server = serve({
 
       return new Response(`Volume wiped! (count: ${count})`);
     },
+    "/trim": async (req) => {
+      const body = await req.json();
+      const schema = z.object({
+        fileId: z.string().nanoid(),
+        start: z.string(),
+        duration: z.string(),
+        outputFormat: z.string(),
+      });
+
+      const parsed = schema.safeParse(body);
+
+      if (!parsed.success) {
+        return Response.json(parsed.error, { status: 400 });
+      }
+
+      const { fileId, start, duration, outputFormat } = parsed.data;
+
+      const inputPath = path.join(uploadDir, fileId);
+      if (!fs.existsSync(inputPath)) {
+        return new Response("File not found", { status: 404 });
+      }
+
+      const taskId = nanoid(8);
+      const pid = trim(inputPath, start, duration, outputFormat, taskId);
+      createTask(taskId, fileId, pid);
+
+      return Response.json({ taskId }, { status: 200 });
+    }
   },
   fetch() {
     return new Response("Hello from bunpeg!");
