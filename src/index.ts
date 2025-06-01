@@ -1,8 +1,12 @@
-import { sql, serve } from "bun";
+import { serve } from "bun";
 
-serve({
-  port: 8000,
+const server = serve({
   routes: {
     "/hello": new Response("Hello from bunpeg!"),
   },
+  fetch(req) {
+    return new Response("Hello from bunpeg!");
+  },
 });
+
+console.log(`Server started on ${server.url}`);
