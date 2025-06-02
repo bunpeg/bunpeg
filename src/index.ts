@@ -7,7 +7,7 @@ import docs from "./www/docs.html";
 import upload from "./www/upload.html";
 
 import { connectDb, initDb } from './utils/db';
-import { extractAudio, trim } from './utils/ffmpeg.ts';
+import { extractAudio, transcode, trim } from './utils/ffmpeg.ts';
 import { createTask, getTask } from './utils/tasks.ts';
 import { createFile, getFile } from './utils/files.ts';
 
@@ -117,6 +117,34 @@ const server = serve({
           'content-disposition': `attachment; filename="${userFile.file_name}"`,
         },
       });
+    },
+
+    "/transcode":  async (req) => {
+      const body = await req.json();
+
+      const schema = z.object({
+        fileId: z.string(),
+        targetFormat: z.string(),
+      });
+
+      const parsed = schema.safeParse(body);
+
+      if (!parsed.success) {
+        return Response.json(parsed.error, { status: 400 });
+      }
+
+      const { fileId, targetFormat } = parsed.data;
+      const file = getFile(fileId);
+
+      if (!file || !fs.existsSync(file.upload_path)) {
+        return new Response("File not found", { status: 404 });
+      }
+
+      const taskId = nanoid(8);
+      createTask(taskId, fileId);
+      transcode(file.upload_path, targetFormat, taskId);
+
+      return Response.json({ taskId }, { status: 200 });
     },
 
     "/trim": async (req) => {
