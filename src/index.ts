@@ -32,21 +32,28 @@ const server = serve({
     "/wipe": async () => {
       let count = 0;
       using db = connectDb();
-      using query = db.query<{ upload_path: string }, string>('SELECT upload_path FROM files');
-      for (const file of query) {
-        const localFile = Bun.file(file.upload_path);
+      using filesQuery = db.query<{ upload_path: string; output_path: string; }, string>('SELECT upload_path, output_path FROM files');
+      for (const file of filesQuery) {
+        const inputFile = Bun.file(file.upload_path);
+        const outputFile = Bun.file(file.output_path);
 
-        if (await localFile.exists()) {
-          await localFile.delete();
+        if (await inputFile.exists()) {
+          await inputFile.delete();
+          count++;
         }
 
-        count++;
+        if (await outputFile.exists()) {
+          await outputFile.delete();
+          count++;
+        }
       }
 
-      using delQuery = db.query('DELETE FROM files');
-      delQuery.run();
+      using filesDelQuery = db.query('DELETE FROM files');
+      filesDelQuery.run();
+      using tasksDelQuery = db.query('DELETE FROM tasks');
+      tasksDelQuery.run();
 
-      return new Response(`Volume wiped! (count: ${count})`);
+      return new Response(`Volume wiped! (file count: ${count})`);
     },
 
     "/upload": async (req) => {
