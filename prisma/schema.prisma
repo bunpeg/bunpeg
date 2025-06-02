@@ -12,16 +12,16 @@ datasource db {
 }
 
 model files {
-  id          String @id
+  id          String  @id
   file_name   String
   upload_path String
+  output_path String?
 }
 
 model tasks {
-  id          String  @id
-  file_id     String
-  pid         Int
-  status      String // 'queued' | 'processing' | 'completed' | 'failed'
-  output_path String?
-  error       String?
+  id      String  @id
+  file_id String
+  pid     Int?
+  status  String // 'queued' | 'processing' | 'completed' | 'downloaded' | 'failed'
+  error   String?
 }

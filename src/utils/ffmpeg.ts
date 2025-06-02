@@ -1,7 +1,8 @@
 import path from "path";
-import { updateTask } from './tasks.ts';
+import { getTask, updateTask } from './tasks.ts';
+import { updateFile } from './files.ts';
 
-const outputDir = "./outputs";
+const outputDir = "./data/outputs";
 
 export function transcode(inputPath: string, outputFormat: string, taskId: string) {
   const outputPath = path.join(outputDir, `${taskId}.${outputFormat}`);
@@ -19,17 +20,20 @@ export function extractAudio(inputPath: string, audioFormat: string, taskId: str
 }
 
 function runFFmpeg(args: string[], taskId: string, outputPath: string) {
-  updateTask(taskId, { status: "processing" });
+  const task = getTask(taskId);
+
+  if (!task) throw new Error(`Task ${taskId} not found!`);
 
   const ffmpeg = Bun.spawn(["ffmpeg", ...args], {
     onExit(_, exitCode: number | null) {
       if (exitCode === 0) {
-        updateTask(taskId, { status: "completed", outputPath });
+        updateTask(taskId, { status: "completed" });
+        updateFile(task.file_id, { output_path: outputPath });
       } else {
         updateTask(taskId, { status: "failed", error: `FFmpeg exited with code ${exitCode}` });
       }
     }
   });
 
-  return ffmpeg.pid;
+  updateTask(taskId, { status: "processing", pid: ffmpeg.pid });
 }
