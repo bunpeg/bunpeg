@@ -20,9 +20,7 @@ export function createFile(fileId: string, fileName: string, uploadPath: string)
 }
 
 export function updateFile(fileId: string, file: Partial<Exclude<UserFile, 'id'>>) {
-  // const params = Object.keys(file).reduce((acc, key) => ({ ...acc, [`\$${key}`]: file[key as keyof UserFile] }), {});
   const params = Object.keys(file).map(key => file[key as keyof UserFile]!);
-  // const setParams = Object.keys(file).map((key) => `${key} = \$${key}`).join(', ');
   const setParams = Object.keys(file).map((key) => `${key} = ?`).join(', ');
 
   using db = connectDb();

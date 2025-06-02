@@ -21,9 +21,7 @@ export function createTask(taskId: string, fileId: string) {
 }
 
 export function updateTask(taskId: string, task: Partial<Exclude<Task, 'id'>>) {
-  // const params = Object.keys(task).reduce((acc, key) => ({ ...acc, [`\$${key}`]: task[key as keyof Task] }), {});
-  const params = Object.values(task).map((key) => task[key as keyof Task]!);
-  // const setParams = Object.keys(task).map((key) => `${key} = \$${key}`).join(', ');
+  const params = Object.keys(task).map((key) => task[key as keyof Task]!);
   const setParams = Object.keys(task).map((key) => `${key} = ?`).join(', ');
 
   using db = connectDb();
