@@ -1,6 +1,7 @@
 import { z } from "zod";
 
-// 🔁 Shared param-only schemas for chaining (no 'fileId', no 'type')
+// Shared param-only schemas for chaining (no 'fileId', no 'type')
+
 const TrimParams = z.object({
   start: z.string().min(1, "Start time is required"),
   duration: z.string().min(1, "Duration is required"),
@@ -20,8 +21,8 @@ const TranscodeParams = z.object({
   format: z.string().min(1, "Format is required"),
 });
 
-// 🟢 Individual operation schemas (for single-operation endpoints)
-// Includes fileId
+// Individual operation schemas (for single-operation endpoints), includes fileId
+
 export const TrimSchema = TrimParams.extend({
   fileId: z.string().min(1, "fileId is required"),
 });
@@ -42,8 +43,8 @@ export const TranscodeSchema = TranscodeParams.extend({
 });
 export type TranscodeOperation = z.infer<typeof TranscodeSchema>;
 
-// 🔁 Chained operation variant schemas (for /chain endpoint)
-// Includes type, no fileId
+// Chained operation variant schemas (for /chain endpoint), includes type and no fileId
+
 export const TrimSchemaWithType = TrimParams.extend({
   type: z.literal("trim"),
 });
@@ -60,7 +61,8 @@ export const TranscodeSchemaWithType = TranscodeParams.extend({
   type: z.literal("transcode"),
 });
 
-// 🔁 Union for chained operations
+// Union for chained operations
+
 export const OperationSchema = z.union([
   TrimSchemaWithType,
   CutEndSchemaWithType,

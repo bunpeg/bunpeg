@@ -9,17 +9,19 @@ import { connectDb, initDb } from './utils/db';
 import { createTask, getTask } from './utils/tasks.ts';
 import { createFile, getFile } from './utils/files.ts';
 import { ChainSchema, CutEndSchema, ExtractAudioSchema, TranscodeSchema, TrimSchema } from './schemas.ts';
+import { startQueue } from './utils/queue.ts';
 
-const bucketDir = "./data/bucket";
+const inputDir = "./data/bucket";
 
-fs.mkdirSync(bucketDir, { recursive: true });
+fs.mkdirSync(inputDir, { recursive: true });
 
 await initDb();
+void startQueue();
 
 const server = serve({
   routes: {
-    "/docs": docs,
-    "/app": upload,
+    "/": docs,
+    "/form": upload,
     "/ffmpeg/version": async () => {
       const output = await $`ffmpeg -version`.text();
       const parts = output.split("\n");
@@ -56,7 +58,7 @@ const server = serve({
     "/upload": async (req) => {
       const formData = await req.formData();
       const __file = formData.get('file');
-      if (!__file) throw new Error('Must upload a profile picture.');
+      if (!__file) throw new Error('Must upload a file.');
 
       const fileId = nanoid(8);
       const file = __file as unknown as File;
@@ -64,8 +66,8 @@ const server = serve({
       const extension = parts.pop();
       const extendedName = `${parts.join('.')}-${fileId}.${extension}`;
 
-      createFile(fileId, file.name, `${bucketDir}/${extendedName}`);
-      await Bun.write(`${bucketDir}/${extendedName}`, file);
+      createFile(fileId, file.name, `${inputDir}/${extendedName}`);
+      await Bun.write(`${inputDir}/${extendedName}`, file);
 
       return Response.json({ fileId }, { status: 200 });
     },
@@ -197,6 +199,7 @@ const server = serve({
       },
     });
   },
+  development: !!process.env.RAILWAY_PROJECT_ID,
 });
 
 console.log(`Server started on ${server.url}`);
