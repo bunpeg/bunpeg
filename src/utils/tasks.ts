@@ -1,11 +1,16 @@
 import { connectDb } from './db.ts';
+import type { Operations } from '../schemas.ts';
+import { nanoid } from 'nanoid';
 
-interface Task {
+export interface Task {
   id: string;
   file_id: string;
+  operation: 'transcode' | 'trim' | 'cut-end' | 'extract-audio';
+  args: string;
   status: 'queued' | 'processing' | 'completed' | 'failed';
   pid?: number;
   error?: string;
+  chain_id?: string;
 }
 
 export function getTask(taskId: string) {
@@ -14,10 +19,16 @@ export function getTask(taskId: string) {
   return query.get(taskId);
 }
 
-export function createTask(taskId: string, fileId: string) {
+export function getNextPendingTask() {
   using db = connectDb();
-  using query = db.query('INSERT INTO tasks (id, file_id, status) VALUES (?, ?, ?)');
-  query.run(taskId, fileId, 'processing'); // TODO: update the status to 'queued' when the queue exits
+  using query = db.query<Task, string>('SELECT * FROM tasks WHERE status = ? LIMIT 1');
+  return query.get('queued');
+}
+
+export function createTask(fileId: string, operation: Task['operation'], args: Operations, chainId?: string) {
+  using db = connectDb();
+  using query = db.query('INSERT INTO tasks (id, file_id, status, operation, args, chain_id) VALUES (?, ?, ?, ?, ?, ?)');
+  query.run(nanoid(8), fileId, 'queued', operation, JSON.stringify(args), chainId ?? null);
 }
 
 export function updateTask(taskId: string, task: Partial<Exclude<Task, 'id'>>) {

@@ -1,10 +1,9 @@
 import { connectDb } from './db.ts';
 
-interface UserFile {
+export interface UserFile {
   id: string;
   file_name: string;
-  upload_path: string;
-  output_path:  string;
+  file_path: string;
 }
 
 export function getFile(fileId: string) {
@@ -13,10 +12,10 @@ export function getFile(fileId: string) {
   return query.get(fileId);
 }
 
-export function createFile(fileId: string, fileName: string, uploadPath: string) {
+export function createFile(fileId: string, fileName: string, filePath: string) {
   using db = connectDb();
-  using query = db.query('INSERT INTO files (id, file_name, upload_path) VALUES (?, ?, ?)');
-  query.run(fileId, fileName, uploadPath);
+  using query = db.query('INSERT INTO files (id, file_name, file_path) VALUES (?, ?, ?)');
+  query.run(fileId, fileName, filePath);
 }
 
 export function updateFile(fileId: string, file: Partial<Exclude<UserFile, 'id'>>) {

@@ -1,10 +1,8 @@
-openapi: 3.0.3
+openapi: 3.1.0
 info:
   title: Bunpeg API
-  version: 1.0.0
-  description: |
-    A service that allows clients to upload media and perform FFmpeg operations via REST endpoints.
-    Includes support for chained operations with a single task ID.
+  version: 1.1.0
+  description: A platform for performing FFmpeg operations via API endpoints.
 
 servers:
   - url: http://localhost:8000
@@ -25,7 +23,7 @@ paths:
                   format: binary
       responses:
         '200':
-          description: File uploaded
+          description: Upload successful
           content:
             application/json:
               schema:
@@ -34,23 +32,31 @@ paths:
                   fileId:
                     type: string
 
-  /transcode:
+  /trim:
     post:
-      summary: Transcode a file to a different format
+      summary: Trim a video
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
+              required:
+                - fileId
+                - start
+                - duration
               properties:
                 fileId:
                   type: string
-                targetFormat:
+                start:
                   type: string
+                  description: Start time in format "00:00:10"
+                duration:
+                  type: string
+                  description: Duration to keep (e.g. "5")
       responses:
         '200':
-          description: Transcoding started
+          description: Trim started
           content:
             application/json:
               schema:
@@ -59,27 +65,27 @@ paths:
                   taskId:
                     type: string
 
-  /trim:
+  /cut-end:
     post:
-      summary: Trim a media file by start time and duration
+      summary: Remove seconds from the end of a media file
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
+              required:
+                - fileId
+                - duration
               properties:
                 fileId:
                   type: string
-                start:
-                  type: string
-                  description: Start time (e.g., "00:00:05")
                 duration:
                   type: string
-                  description: Duration to keep (e.g., "10")
+                  description: Seconds to remove from the end (e.g. "5")
       responses:
         '200':
-          description: Trimming started
+          description: Cut-end started
           content:
             application/json:
               schema:
@@ -90,13 +96,15 @@ paths:
 
   /extract-audio:
     post:
-      summary: Extract audio from a video file
+      summary: Extract audio from a video
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
+              required:
+                - fileId
               properties:
                 fileId:
                   type: string
@@ -111,12 +119,38 @@ paths:
                   taskId:
                     type: string
 
+  /transcode:
+    post:
+      summary: Transcode a video to a different format
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - fileId
+                - format
+              properties:
+                fileId:
+                  type: string
+                format:
+                  type: string
+                  description: Target format (e.g. "mp4", "webm")
+      responses:
+        '200':
+          description: Transcoding started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  taskId:
+                    type: string
+
   /chain:
     post:
-      summary: Perform multiple FFmpeg operations in sequence on a file
-      description: |
-        Supports chaining of operations like trim, extract-audio, and transcode.
-        Operations are applied in the order given. Uses the same task ID for all steps.
+      summary: Chain multiple FFmpeg operations together
       requestBody:
         required: true
         content:
@@ -144,6 +178,15 @@ paths:
                           duration:
                             type: string
                       - type: object
+                        required: [type, duration]
+                        properties:
+                          type:
+                            type: string
+                            enum: [cut-end]
+                          duration:
+                            type: string
+                            description: Seconds to trim from end
+                      - type: object
                         required: [type]
                         properties:
                           type:
@@ -159,7 +202,7 @@ paths:
                             type: string
       responses:
         '200':
-          description: Chained processing started
+          description: Chained task started
           content:
             application/json:
               schema:
@@ -170,7 +213,7 @@ paths:
 
   /status/{taskId}:
     get:
-      summary: Get the status of a task
+      summary: Get task status
       parameters:
         - in: path
           name: taskId
@@ -187,17 +230,14 @@ paths:
                 properties:
                   status:
                     type: string
-                    enum: [queued, processing, completed, failed]
-                  outputPath:
-                    type: string
-                    nullable: true
+                    enum: [pending, complete, error]
                   error:
                     type: string
                     nullable: true
 
   /download/{fileId}:
     get:
-      summary: Download the original file
+      summary: Download original file
       parameters:
         - in: path
           name: fileId
@@ -215,7 +255,7 @@ paths:
 
   /output/{fileId}:
     get:
-      summary: Download the processed file
+      summary: Download processed file
       parameters:
         - in: path
           name: fileId
