@@ -25,6 +25,18 @@ export function getNextPendingTask() {
   return query.get('queued');
 }
 
+export function getTasksForFile(fileId: string) {
+  using db = connectDb();
+  using query = db.query<Task, string>('SELECT * FROM tasks WHERE file_id = ?');
+  return query.all(fileId);
+}
+
+export function removePendingTasksForFile(fileId: string) {
+  using db = connectDb();
+  using query = db.query<Task, string[]>('DELETE FROM tasks WHERE file_id = ? and status = ?');
+  return query.all(fileId, 'queued');
+}
+
 export function createTask(fileId: string, operation: Task['operation'], args: Operations, chainId?: string) {
   using db = connectDb();
   using query = db.query('INSERT INTO tasks (id, file_id, status, operation, args, chain_id) VALUES (?, ?, ?, ?, ?, ?)');

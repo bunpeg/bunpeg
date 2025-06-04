@@ -6,17 +6,19 @@ import docs from './www/docs.html';
 import upload from './www/upload.html';
 
 import { connectDb, initDb } from './utils/db';
-import { createTask, getTask } from './utils/tasks.ts';
+import { createTask, getTasksForFile, type Task } from './utils/tasks.ts';
 import { createFile, getFile } from './utils/files.ts';
 import { ChainSchema, CutEndSchema, ExtractAudioSchema, TranscodeSchema, TrimSchema } from './schemas.ts';
-import { startQueue } from './utils/queue.ts';
+import { startFFQueue } from './utils/queue-ff.ts';
+import { addBgTask, startBgQueue } from './utils/queue-bg.ts';
 
 const inputDir = "./data/bucket";
 
 fs.mkdirSync(inputDir, { recursive: true });
 
 await initDb();
-void startQueue();
+void startFFQueue();
+void startBgQueue();
 
 const server = serve({
   routes: {
@@ -81,6 +83,10 @@ const server = serve({
 
       const file = Bun.file(dbFile.file_path);
 
+      void addBgTask(async () => {
+        return file.delete();
+      });
+
       return new Response(file, {
         headers: {
           'content-disposition': `attachment; filename="${dbFile.file_name}"`,
@@ -88,10 +94,19 @@ const server = serve({
       });
     },
 
-    "/status/:taskId": async (req) => {
-      const taskId = req.params.taskId;
-      const task = getTask(taskId);
-      return Response.json({ taskId, status: task?.status ?? 'unknown' },  { status: 200 });
+    "/status/:fileId": async (req) => {
+      const fileId = req.params.fileId;
+      const tasks = getTasksForFile(fileId);
+
+      if (tasks.length === 0) {
+        return Response.json({ fileId, status: 'not-found' }, { status: 200 });
+      }
+
+      const pendingStatus = ['queued', 'processing'] as Task['status'][];
+      const isPending = tasks.some((task) => pendingStatus.includes(task.status));
+      const lastTask = tasks.at(-1)!;
+
+      return Response.json({ fileId, status: isPending ? 'pending' : lastTask.status },  { status: 200 });
     },
 
     "/transcode":  async (req) => {
