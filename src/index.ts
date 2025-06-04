@@ -94,6 +94,22 @@ const server = serve({
       });
     },
 
+    "/output/:fileId": async (req) => {
+      const fileId = req.params.fileId;
+      if (!fileId) throw new Error('Invalid file id');
+
+      const dbFile = getFile(fileId);
+      if (!dbFile?.file_name) throw new Error('Invalid file id');
+
+      const file = Bun.file(dbFile.file_path);
+
+      return new Response(file, {
+        headers: {
+          'content-disposition': `attachment; filename="${dbFile.file_name}"`,
+        },
+      });
+    },
+
     "/status/:fileId": async (req) => {
       const fileId = req.params.fileId;
       const tasks = getTasksForFile(fileId);
