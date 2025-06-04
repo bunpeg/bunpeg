@@ -1,5 +1,5 @@
 {
-  "name": "bunpeg",
+  "name": "@bunpeg/server",
   "module": "src/index.ts",
   "type": "module",
   "private": true,
