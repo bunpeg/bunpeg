@@ -19,10 +19,16 @@ export function getTask(taskId: string) {
   return query.get(taskId);
 }
 
-export function getNextPendingTask() {
+export function getNextPendingTask(params: { excludeFileIds: string[] }) {
   using db = connectDb();
-  using query = db.query<Task, string>('SELECT * FROM tasks WHERE status = ? LIMIT 1');
-  return query.get('queued');
+  using query = db.query<Task, string[]>(`
+    SELECT * FROM tasks
+    WHERE status = ?
+    ${params.excludeFileIds.length > 0 ? `AND file_id NOT IN (${params.excludeFileIds.map(() => '?').join(', ')}` : ' '}
+    LIMIT 1
+  `);
+
+  return query.get('queued', ...params.excludeFileIds) ;
 }
 
 export function getTasksForFile(fileId: string) {

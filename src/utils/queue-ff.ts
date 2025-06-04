@@ -4,6 +4,7 @@ import { runOperation } from './ffmpeg.ts';
 const MAX_CONCURRENT_TASKS = Number(process.env.MAX_CONCURRENT_TASKS);
 
 const activeTasks = new Set<string>();
+const activeFiles = new Set<string>();
 
 export async function startFFQueue() {
   console.log("FFmpeg Queue started. Max concurrency:", MAX_CONCURRENT_TASKS);
@@ -14,7 +15,7 @@ export async function startFFQueue() {
       continue;
     }
 
-    const task = getNextPendingTask();
+    const task = getNextPendingTask({ excludeFileIds: Array.from(activeFiles) });
     if (!task) {
       await Bun.sleep(500);
       continue;
@@ -25,6 +26,7 @@ export async function startFFQueue() {
 
     // Track task
     activeTasks.add(task.id);
+    activeFiles.add(task.file_id);
 
     runOperation(task.operation, task.args, task.file_id, task.id)
       .catch((error) => {
@@ -34,6 +36,7 @@ export async function startFFQueue() {
       })
       .finally(() => {
         activeTasks.delete(task.id);
+        activeFiles.delete(task.file_id);
       });
   }
 }
