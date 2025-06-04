@@ -24,6 +24,6 @@ export async function startBgQueue() {
   }
 }
 
-export function addBgTask(task: () => Promise<void>) {
+export function after(task: () => Promise<void>) {
   tasks.push(task);
 }

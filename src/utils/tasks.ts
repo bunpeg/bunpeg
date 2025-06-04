@@ -36,12 +36,6 @@ export function getTasksForFile(fileId: string) {
   return query.all(fileId);
 }
 
-export function markPendingTasksAsUnreachableForFile(fileId: string) {
-  using db = connectDb();
-  using query = db.query<Task, string[]>('UPDATE tasks SET status = ? WHERE file_id = ? and status = ?');
-  return query.all('unreachable', fileId, 'queued');
-}
-
 export function createTask(fileId: string, operation: Task['operation'], args: Operations, chainId?: string) {
   using db = connectDb();
   using query = db.query('INSERT INTO tasks (id, file_id, status, operation, args) VALUES (?, ?, ?, ?, ?)');
@@ -55,4 +49,16 @@ export function updateTask(taskId: string, task: Partial<Exclude<Task, 'id'>>) {
   using db = connectDb();
   using query = db.query(`UPDATE tasks SET ${setParams} WHERE id = ?`);
   query.run(...params, taskId)
+}
+
+export function markPendingTasksAsUnreachableForFile(fileId: string) {
+  using db = connectDb();
+  using query = db.query<Task, string[]>('UPDATE tasks SET status = ? WHERE file_id = ? and status = ?');
+  return query.all('unreachable', fileId, 'queued');
+}
+
+export function deleteAllTasksForFile(fileId: string) {
+  using db = connectDb();
+  using  query = db.query('DELETE FROM tasks WHERE file_id = ?');
+  query.run(fileId);
 }

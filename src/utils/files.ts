@@ -26,3 +26,9 @@ export function updateFile(fileId: string, file: Partial<Exclude<UserFile, 'id'>
   using query = db.query(`UPDATE files SET ${setParams} WHERE id = $id`);
   query.run(...params, fileId)
 }
+
+export function deleteFile(fileId: string) {
+  using db = connectDb();
+  using query = db.query('DELETE FROM files WHERE id = ?');
+  query.run(fileId);
+}

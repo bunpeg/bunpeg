@@ -6,11 +6,11 @@ import docs from './www/docs.html';
 import upload from './www/upload.html';
 
 import { connectDb, initDb } from './utils/db';
-import { createTask, getTasksForFile, type Task } from './utils/tasks.ts';
-import { createFile, getFile } from './utils/files.ts';
+import { createTask, deleteAllTasksForFile, getTasksForFile, type Task } from './utils/tasks.ts';
+import { createFile, deleteFile, getFile } from './utils/files.ts';
 import { ChainSchema, CutEndSchema, ExtractAudioSchema, TranscodeSchema, TrimSchema } from './schemas.ts';
 import { startFFQueue } from './utils/queue-ff.ts';
-import { addBgTask, startBgQueue } from './utils/queue-bg.ts';
+import { after, startBgQueue } from './utils/queue-bg.ts';
 
 const inputDir = "./data/bucket";
 
@@ -83,8 +83,10 @@ const server = serve({
 
       const file = Bun.file(dbFile.file_path);
 
-      void addBgTask(async () => {
-        return file.delete();
+      after(async () => {
+        await file.delete();
+        deleteAllTasksForFile(fileId);
+        deleteFile(fileId);
       });
 
       return new Response(file, {
