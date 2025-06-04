@@ -7,10 +7,9 @@ export interface Task {
   file_id: string;
   operation: 'transcode' | 'trim' | 'cut-end' | 'extract-audio';
   args: string;
-  status: 'queued' | 'processing' | 'completed' | 'failed';
+  status: 'queued' | 'processing' | 'completed' | 'failed' | 'unreachable';
   pid?: number;
   error?: string;
-  chain_id?: string;
 }
 
 export function getTask(taskId: string) {
@@ -37,16 +36,16 @@ export function getTasksForFile(fileId: string) {
   return query.all(fileId);
 }
 
-export function removePendingTasksForFile(fileId: string) {
+export function markPendingTasksAsUnreachableForFile(fileId: string) {
   using db = connectDb();
-  using query = db.query<Task, string[]>('DELETE FROM tasks WHERE file_id = ? and status = ?');
-  return query.all(fileId, 'queued');
+  using query = db.query<Task, string[]>('UPDATE tasks SET status = ? WHERE file_id = ? and status = ?');
+  return query.all('unreachable', fileId, 'queued');
 }
 
 export function createTask(fileId: string, operation: Task['operation'], args: Operations, chainId?: string) {
   using db = connectDb();
-  using query = db.query('INSERT INTO tasks (id, file_id, status, operation, args, chain_id) VALUES (?, ?, ?, ?, ?, ?)');
-  query.run(nanoid(8), fileId, 'queued', operation, JSON.stringify(args), chainId ?? null);
+  using query = db.query('INSERT INTO tasks (id, file_id, status, operation, args) VALUES (?, ?, ?, ?, ?)');
+  query.run(nanoid(8), fileId, 'queued', operation, JSON.stringify(args));
 }
 
 export function updateTask(taskId: string, task: Partial<Exclude<Task, 'id'>>) {
