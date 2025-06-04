@@ -1,6 +1,6 @@
 import { $ } from 'bun';
 import path from "path";
-import { getTask, type Task, updateTask } from './tasks';
+import { getTask, markPendingTasksAsUnreachableForFile, type Task, updateTask } from './tasks';
 import { getFile, updateFile } from './files';
 import type {
   CutEndOperation,
@@ -76,17 +76,13 @@ function runFFmpeg(args: string[], taskId: string, outputPath: string) {
 
   const ffmpeg = Bun.spawn(["ffmpeg", ...args], {
     timeout: 1000 * 60 * 15, // 15 minutes
-    killSignal: 'SIGTIMEOUT',
-    onExit(_sub, exitCode: number | null, _sigCode, burError) {
+    onExit(_sub, exitCode: number | null, sigCode, burError) {
       if (exitCode === 0) {
         updateTask(taskId, { status: "completed" });
         updateFile(task.file_id, { file_path: outputPath });
-      } else if (burError?.code === 'SIGTIMEOUT') {
-        //TODO: check what happens when a task times out, the subsequent tasks should not run,
-        // this should have the same task management as in the queue when the function fails,
-        updateTask(taskId, { status: "queued" });
       } else {
-        updateTask(taskId, { status: "failed", error: `FFmpeg exited with code ${exitCode}` });
+        updateTask(taskId, { status: "failed", error: `FFmpeg exited with code: ${exitCode} & signal ${sigCode}` });
+        markPendingTasksAsUnreachableForFile(task.file_id);
       }
     }
   });
