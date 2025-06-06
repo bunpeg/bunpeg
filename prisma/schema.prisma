@@ -7,8 +7,8 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider = "postgresql"
+  url      = env("POSTGRES_URL")
 }
 
 model files {
@@ -25,4 +25,6 @@ model tasks {
   args      String // stringigied JSON with the operations args (matches the schema for the operation)
   status    String // 'queued' | 'processing' | 'completed' | 'failed' | 'unreachable'
   error     String?
+
+  @@index([file_id])
 }

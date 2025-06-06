@@ -13,17 +13,17 @@ const outputDir = "./data/bucket";
 
 export function transcode(inputPath: string, outputFormat: string, taskId: string) {
   const outputPath = path.join(outputDir, `${taskId}.${outputFormat}`);
-  runFFmpeg(["-i", inputPath, outputPath], taskId, outputPath);
+  void runFFmpeg(["-i", inputPath, outputPath], taskId, outputPath);
 }
 
 export function trim(inputPath: string, start: string, duration: string, outputFormat: string, taskId: string) {
   const outputPath = path.join(outputDir, `${taskId}.${outputFormat}`);
-  runFFmpeg(["-i", inputPath, "-ss", start, "-t", duration, "-c", "copy", outputPath], taskId, outputPath);
+  void runFFmpeg(["-i", inputPath, "-ss", start, "-t", duration, "-c", "copy", outputPath], taskId, outputPath);
 }
 
 export function extractAudio(inputPath: string, audioFormat: string, taskId: string) {
   const outputPath = path.join(outputDir, `${taskId}.${audioFormat}`);
-  runFFmpeg(["-i", inputPath, "-vn", "-acodec", "copy", outputPath], taskId, outputPath);
+  void runFFmpeg(["-i", inputPath, "-vn", "-acodec", "copy", outputPath], taskId, outputPath);
 }
 
 export async function cutEnd(inputPath: string, duration: string, outputFormat: string, taskId: string) {
@@ -32,7 +32,7 @@ export async function cutEnd(inputPath: string, duration: string, outputFormat: 
   if (keepDuration <= 0) throw new Error("Resulting video would be empty");
 
   const outputPath = path.join(outputDir, `${taskId}.${outputFormat}`);
-  runFFmpeg(["-i", inputPath, "-t", keepDuration.toFixed(2), "-c", "copy", outputPath], taskId, outputPath);
+  void runFFmpeg(["-i", inputPath, "-t", keepDuration.toFixed(2), "-c", "copy", outputPath], taskId, outputPath);
 }
 
 export async function getVideoDuration(filePath: string) {
@@ -41,7 +41,7 @@ export async function getVideoDuration(filePath: string) {
 }
 
 export async function runOperation(operation: Task['operation'], jsonArgs: string, fileId: string, taskId: string) {
-  const userFile = getFile(fileId);
+  const userFile = await getFile(fileId);
   if (!userFile) {
     throw  new Error(`No user file found`);
   }
@@ -69,20 +69,20 @@ export async function runOperation(operation: Task['operation'], jsonArgs: strin
   }
 }
 
-function runFFmpeg(args: string[], taskId: string, outputPath: string) {
+async function runFFmpeg(args: string[], taskId: string, outputPath: string) {
   const task = getTask(taskId);
 
   if (!task) throw new Error(`Task ${taskId} not found!`);
 
   const ffmpeg = Bun.spawn(["ffmpeg", ...args], {
     timeout: 1000 * 60 * 15, // 15 minutes
-    onExit(_sub, exitCode: number | null, sigCode, burError) {
+    onExit: async (_sub, exitCode: number | null, sigCode, burError) => {
       if (exitCode === 0) {
-        updateTask(taskId, { status: "completed" });
-        updateFile(task.file_id, { file_path: outputPath });
+        await updateTask(taskId, { status: "completed" });
+        await updateFile(task.file_id, { file_path: outputPath });
       } else {
-        updateTask(taskId, { status: "failed", error: `FFmpeg exited with code: ${exitCode} & signal ${sigCode}` });
-        markPendingTasksAsUnreachableForFile(task.file_id);
+        await updateTask(taskId, { status: "failed", error: `FFmpeg exited with code: ${exitCode} & signal ${sigCode}` });
+        await markPendingTasksAsUnreachableForFile(task.file_id);
       }
     }
   });

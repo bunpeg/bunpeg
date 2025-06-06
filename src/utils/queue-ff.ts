@@ -15,14 +15,14 @@ export async function startFFQueue() {
       continue;
     }
 
-    const task = getNextPendingTask({ excludeFileIds: Array.from(activeFiles) });
+    const task = await getNextPendingTask({ excludeFileIds: Array.from(activeFiles) });
     if (!task) {
       await Bun.sleep(500);
       continue;
     }
 
     // Mark as processing to lock it
-    updateTask(task.id, { status: 'processing' });
+    await updateTask(task.id, { status: 'processing' });
 
     // Track task
     activeTasks.add(task.id);
@@ -31,7 +31,6 @@ export async function startFFQueue() {
     runOperation(task.operation, task.args, task.file_id, task.id)
       .catch((error) => {
         console.error(error);
-        // TODO: change to mark the tasks as unreachable, this helps with traceback
         markPendingTasksAsUnreachableForFile(task.file_id);
       })
       .finally(() => {

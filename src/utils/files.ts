@@ -1,4 +1,4 @@
-import { connectDb } from './db.ts';
+import { sql } from 'bun';
 
 export interface UserFile {
   id: string;
@@ -6,29 +6,19 @@ export interface UserFile {
   file_path: string;
 }
 
-export function getFile(fileId: string) {
-  using db = connectDb();
-  using query = db.query<UserFile, string>('SELECT * FROM files WHERE id = ?');
-  return query.get(fileId);
+export async function getFile(fileId: string) {
+  const query = await sql`SELECT * FROM files WHERE id = ${fileId}`;
+  return query[0] as UserFile | undefined;
 }
 
-export function createFile(fileId: string, fileName: string, filePath: string) {
-  using db = connectDb();
-  using query = db.query('INSERT INTO files (id, file_name, file_path) VALUES (?, ?, ?)');
-  query.run(fileId, fileName, filePath);
+export async function createFile(fileId: string, fileName: string, filePath: string) {
+  await sql`INSERT INTO files ${sql({ id: fileId, file_name: fileName, file_path: filePath })}`;
 }
 
-export function updateFile(fileId: string, file: Partial<Exclude<UserFile, 'id'>>) {
-  const params = Object.keys(file).map(key => file[key as keyof UserFile]!);
-  const setParams = Object.keys(file).map((key) => `${key} = ?`).join(', ');
-
-  using db = connectDb();
-  using query = db.query(`UPDATE files SET ${setParams} WHERE id = $id`);
-  query.run(...params, fileId)
+export async function updateFile(fileId: string, file: Partial<Exclude<UserFile, 'id'>>) {
+  await sql`UPDATE files SET ${sql(file)} WHERE id = ${fileId}`;
 }
 
-export function deleteFile(fileId: string) {
-  using db = connectDb();
-  using query = db.query('DELETE FROM files WHERE id = ?');
-  query.run(fileId);
+export async  function deleteFile(fileId: string) {
+  await sql`DELETE FROM files WHERE id = ${fileId}`;
 }

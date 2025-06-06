@@ -5,8 +5,8 @@ import { nanoid } from 'nanoid';
 import docs from './www/docs.html';
 import upload from './www/upload.html';
 
-import { connectDb, initDb } from './utils/db';
-import { createTask, deleteAllTasksForFile, getTasksForFile, type Task } from './utils/tasks.ts';
+import { connectDb } from './utils/db';
+import { bulkCreateTasks, createTask, deleteAllTasksForFile, getTasksForFile, type Task } from './utils/tasks.ts';
 import { createFile, deleteFile, getFile } from './utils/files.ts';
 import { ChainSchema, CutEndSchema, ExtractAudioSchema, TranscodeSchema, TrimSchema } from './schemas.ts';
 import { startFFQueue } from './utils/queue-ff.ts';
@@ -16,7 +16,6 @@ const inputDir = "./data/bucket";
 
 fs.mkdirSync(inputDir, { recursive: true });
 
-await initDb();
 void startFFQueue();
 void startBgQueue();
 
@@ -68,7 +67,7 @@ const server = serve({
       const extension = parts.pop();
       const extendedName = `${parts.join('.')}-${fileId}.${extension}`;
 
-      createFile(fileId, file.name, `${inputDir}/${extendedName}`);
+      await createFile(fileId, file.name, `${inputDir}/${extendedName}`);
       await Bun.write(`${inputDir}/${extendedName}`, file);
 
       return Response.json({ fileId }, { status: 200 });
@@ -78,15 +77,16 @@ const server = serve({
       const fileId = req.params.fileId;
       if (!fileId) throw new Error('Invalid file id');
 
-      const dbFile = getFile(fileId);
+      const dbFile = await getFile(fileId);
+      console.log('dbFile', dbFile);
       if (!dbFile?.file_name) throw new Error('Invalid file id');
 
       const file = Bun.file(dbFile.file_path);
 
       after(async () => {
         await file.delete();
-        deleteAllTasksForFile(fileId);
-        deleteFile(fileId);
+        await deleteAllTasksForFile(fileId);
+        await deleteFile(fileId);
       });
 
       return new Response(file, {
@@ -100,7 +100,7 @@ const server = serve({
       const fileId = req.params.fileId;
       if (!fileId) throw new Error('Invalid file id');
 
-      const dbFile = getFile(fileId);
+      const dbFile = await getFile(fileId);
       if (!dbFile?.file_name) throw new Error('Invalid file id');
 
       const file = Bun.file(dbFile.file_path);
@@ -114,12 +114,13 @@ const server = serve({
 
     "/status/:fileId": async (req) => {
       const fileId = req.params.fileId;
-      const tasks = getTasksForFile(fileId);
+      const tasks = await getTasksForFile(fileId);
 
       if (tasks.length === 0) {
         return Response.json({ fileId, status: 'not-found' }, { status: 200 });
       }
 
+      // TODO: double check this logic
       const pendingStatus = ['queued', 'processing'] as Task['status'][];
       const isPending = tasks.some((task) => pendingStatus.includes(task.status));
       const lastTask = tasks.at(-1)!;
@@ -135,13 +136,13 @@ const server = serve({
       }
 
       const { fileId, format } = parsed.data;
-      const file = getFile(fileId);
+      const file = await getFile(fileId);
 
       if (!file || !fs.existsSync(file.file_path)) {
         return new Response("File not found", { status: 404 });
       }
 
-      createTask(fileId, 'transcode', { format });
+      await createTask(fileId, 'transcode', { format });
       return Response.json({ success: true }, { status: 200 });
     },
 
@@ -154,12 +155,12 @@ const server = serve({
 
       const { fileId, start, duration, outputFormat } = parsed.data;
 
-      const userFile = getFile(fileId);
+      const userFile = await getFile(fileId);
       if (!userFile || !fs.existsSync(userFile.file_path)) {
         return new Response("File not found", { status: 404 });
       }
 
-      createTask(fileId, 'trim', { start, duration, outputFormat });
+      await createTask(fileId, 'trim', { start, duration, outputFormat });
       return Response.json({ success: true }, { status: 200 });
     },
 
@@ -172,13 +173,13 @@ const server = serve({
 
       const { fileId, duration, outputFormat } = parsed.data;
 
-      const userFile = getFile(fileId);
+      const userFile = await getFile(fileId);
 
       if (!userFile || !fs.existsSync(userFile.file_path)) {
         return new Response('File not found', { status: 400 });
       }
 
-      createTask(fileId, 'cut-end', { duration, outputFormat });
+      await createTask(fileId, 'cut-end', { duration, outputFormat });
       return Response.json({ success: true }, { status: 200 });
     },
 
@@ -190,13 +191,13 @@ const server = serve({
       }
 
       const { fileId, audioFormat } = parsed.data;
-      const userFile = getFile(fileId);
+      const userFile = await getFile(fileId);
 
       if (!userFile || !fs.existsSync(userFile.file_path)) {
         return new Response("File not found", { status: 404 });
       }
 
-      createTask(fileId, 'extract-audio', { audioFormat });
+      await createTask(fileId, 'extract-audio', { audioFormat });
       return Response.json({ success: true },  { status: 200 });
     },
 
@@ -207,15 +208,16 @@ const server = serve({
       }
 
       const { fileId, operations } = parsed.data;
-      const userFile = getFile(fileId);
+      const userFile = await getFile(fileId);
       if (!userFile || !fs.existsSync(userFile.file_path)) {
         return new Response("File not found", { status: 404 });
       }
 
-      for (const operation of operations) {
-        const { type, ...args } = operation;
-        createTask(fileId, type, args);
-      }
+      await bulkCreateTasks(operations.map(({ type: operation, ...args }) => ({
+        fileId,
+        operation,
+        args,
+      })))
 
       return Response.json({ success: true },  { status: 200 });
     },

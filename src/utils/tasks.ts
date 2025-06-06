@@ -1,6 +1,7 @@
 import { connectDb } from './db.ts';
 import type { Operations } from '../schemas.ts';
 import { nanoid } from 'nanoid';
+import { sql } from 'bun';
 
 export interface Task {
   id: string;
@@ -13,52 +14,87 @@ export interface Task {
 }
 
 export function getTask(taskId: string) {
-  using db = connectDb();
-  using query = db.query<Task, string>('SELECT * FROM tasks WHERE id = ?');
-  return query.get(taskId);
+  // using db = connectDb();
+  // using query = db.query<Task, string>('SELECT * FROM tasks WHERE id = ?');
+  // return query.get(taskId);
+
+  const query = `SELECT * FROM tasks WHERE id = ${taskId}`;
+  return query[0] as Task | undefined;
 }
 
-export function getNextPendingTask(params: { excludeFileIds: string[] }) {
-  using db = connectDb();
-  using query = db.query<Task, string[]>(`
-    SELECT * FROM tasks
-    WHERE status = ?
-    ${params.excludeFileIds.length > 0 ? `AND file_id NOT IN (${params.excludeFileIds.map(() => '?').join(', ')}` : ' '}
-    LIMIT 1
-  `);
+export async function getNextPendingTask(params: { excludeFileIds: string[] }) {
+  // using db = connectDb();
+  // using query = db.query<Task, string[]>(`
+  //   SELECT * FROM tasks
+  //   WHERE status = ?
+  //   ${params.excludeFileIds.length > 0 ? `AND file_id NOT IN (${params.excludeFileIds.map(() => '?').join(', ')}` : ' '}
+  //   LIMIT 1
+  // `);
 
-  return query.get('queued', ...params.excludeFileIds) ;
+  const fileIdsFilter = params.excludeFileIds.length > 0 ? sql`AND file_id NOT IN ${sql(params.excludeFileIds)}` : sql``;
+  const query = await sql`
+    SELECT *
+    FROM tasks
+    WHERE status = ? ${fileIdsFilter}`;
+
+  return query[0] as Task | undefined;
 }
 
-export function getTasksForFile(fileId: string) {
-  using db = connectDb();
-  using query = db.query<Task, string>('SELECT * FROM tasks WHERE file_id = ?');
-  return query.all(fileId);
+export async function getTasksForFile(fileId: string) {
+  // using db = connectDb();
+  // using query = db.query<Task, string>('SELECT * FROM tasks WHERE file_id = ?');
+  // return query.all(fileId);
+
+  return (await sql(`SELECT * FROM tasks WHERE file_id = ?`)) as Task[];
 }
 
-export function createTask(fileId: string, operation: Task['operation'], args: Operations, chainId?: string) {
-  using db = connectDb();
-  using query = db.query('INSERT INTO tasks (id, file_id, status, operation, args) VALUES (?, ?, ?, ?, ?)');
-  query.run(nanoid(8), fileId, 'queued', operation, JSON.stringify(args));
+export async function createTask(fileId: string, operation: Task['operation'], args: Operations, chainId?: string) {
+  // using db = connectDb();
+  // using query = db.query('INSERT INTO tasks (id, file_id, status, operation, args) VALUES (?, ?, ?, ?, ?)');
+  // query.run(nanoid(8), fileId, 'queued', operation, JSON.stringify(args));
+
+  await sql`INSERT INTO tasks ${sql({
+    id: nanoid(8),
+    file_id: fileId,
+    status: 'queued',
+    operation,
+    args: JSON.stringify(args),
+  })}`
 }
 
-export function updateTask(taskId: string, task: Partial<Exclude<Task, 'id'>>) {
-  const params = Object.keys(task).map((key) => task[key as keyof Task]!);
-  const setParams = Object.keys(task).map((key) => `${key} = ?`).join(', ');
+export async function bulkCreateTasks(tasks: { fileId: string, operation: Task['operation'], args: Operations }[]) {
+  const dbInput = tasks.map((t) => ({
+    id: nanoid(8),
+    file_id: t.fileId,
+    status: 'queued',
+    operation: t.operation,
+    args: JSON.stringify(t.args),
+  }))
 
-  using db = connectDb();
-  using query = db.query(`UPDATE tasks SET ${setParams} WHERE id = ?`);
-  query.run(...params, taskId)
+  await sql`INSERT INTO tasks ${sql(dbInput)}`
 }
 
-export function markPendingTasksAsUnreachableForFile(fileId: string) {
-  using db = connectDb();
-  using query = db.query<Task, string[]>('UPDATE tasks SET status = ? WHERE file_id = ? and status = ?');
-  return query.all('unreachable', fileId, 'queued');
+export async function updateTask(taskId: string, task: Partial<Exclude<Task, 'id'>>) {
+  // const params = Object.keys(task).map((key) => task[key as keyof Task]!);
+  // const setParams = Object.keys(task).map((key) => `${key} = ?`).join(', ');
+  //
+  // using db = connectDb();
+  // using query = db.query(`UPDATE tasks SET ${setParams} WHERE id = ?`);
+  // query.run(...params, taskId)
+
+  await sql`UPDATE tasks SET ${sql(task)} WHERE id = ${taskId}`;
 }
 
-export function deleteAllTasksForFile(fileId: string) {
-  using db = connectDb();
-  using  query = db.query('DELETE FROM tasks WHERE file_id = ?');
-  query.run(fileId);
+export async function markPendingTasksAsUnreachableForFile(fileId: string) {
+  // using db = connectDb();
+  // using query = db.query<Task, string[]>('UPDATE tasks SET status = ? WHERE file_id = ? and status = ?');
+  // return query.all('unreachable', fileId, 'queued');
+  await sql`UPDATE tasks SET status = 'unreachable' WHERE id = ${fileId} and status = 'queued'`;
+}
+
+export async function deleteAllTasksForFile(fileId: string) {
+  // using db = connectDb();
+  // using  query = db.query('DELETE FROM tasks WHERE file_id = ?');
+  // query.run(fileId);
+  await sql`DELETE FROM tasks WHERE file_id = ${fileId}`;
 }
