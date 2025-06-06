@@ -30,7 +30,6 @@ const server = serve({
     },
 
     "/wipe": async () => {
-      let count = 0;
       await sql`DELETE FROM files`;
       await sql`'DELETE FROM tasks`;
       await rm(inputDir, { recursive: true, force: true });

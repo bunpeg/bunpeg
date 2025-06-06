@@ -5,7 +5,7 @@ export async function startBgQueue() {
   console.log("Background Queue started.");
 
   while (true) {
-    if (tasks.length >= MAX_CONCURRENT_TASKS) {
+    if (tasks.length >= MAX_CONCURRENT_TASKS || tasks.length === 0) {
       await Bun.sleep(500); // allow time for running tasks to finish
       continue;
     }

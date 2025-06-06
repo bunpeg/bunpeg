@@ -35,7 +35,7 @@ export async function getNextPendingTask(params: { excludeFileIds: string[] }) {
   const query = await sql`
     SELECT *
     FROM tasks
-    WHERE status = ? ${fileIdsFilter}`;
+    WHERE status = 'queued' ${fileIdsFilter}`;
 
   return query[0] as Task | undefined;
 }
