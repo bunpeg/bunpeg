@@ -1,11 +1,11 @@
-import { $, serve } from 'bun';
+import { $, serve, sql } from 'bun';
 import fs from 'fs';
+import { rm } from "node:fs/promises";
 import { nanoid } from 'nanoid';
 
 import docs from './www/docs.html';
 import upload from './www/upload.html';
 
-import { connectDb } from './utils/db';
 import { bulkCreateTasks, createTask, deleteAllTasksForFile, getTasksForFile, type Task } from './utils/tasks.ts';
 import { createFile, deleteFile, getFile } from './utils/files.ts';
 import { ChainSchema, CutEndSchema, ExtractAudioSchema, TranscodeSchema, TrimSchema } from './schemas.ts';
@@ -31,29 +31,11 @@ const server = serve({
 
     "/wipe": async () => {
       let count = 0;
-      using db = connectDb();
-      using filesQuery = db.query<{ upload_path: string; output_path: string; }, string>('SELECT upload_path, output_path FROM files');
-      for (const file of filesQuery) {
-        const inputFile = Bun.file(file.upload_path);
-        const outputFile = Bun.file(file.output_path);
+      await sql`DELETE FROM files`;
+      await sql`'DELETE FROM tasks`;
+      await rm(inputDir, { recursive: true, force: true });
 
-        if (await inputFile.exists()) {
-          await inputFile.delete();
-          count++;
-        }
-
-        if (await outputFile.exists()) {
-          await outputFile.delete();
-          count++;
-        }
-      }
-
-      using filesDelQuery = db.query('DELETE FROM files');
-      filesDelQuery.run();
-      using tasksDelQuery = db.query('DELETE FROM tasks');
-      tasksDelQuery.run();
-
-      return new Response(`Volume wiped! (file count: ${count})`);
+      return new Response(`Platform wiped!`);
     },
 
     "/upload": async (req) => {
