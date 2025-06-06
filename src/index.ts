@@ -38,6 +38,19 @@ const server = serve({
       return new Response(`Platform wiped!`);
     },
 
+    "/files": async () => {
+      const files = await sql`SELECT * FROM files`;
+      return Response.json({ files }, { status: 200 });
+    },
+
+    "/tasks/:fileId": async (req) => {
+      const fileId = req.params.fileId;
+      if (!fileId) throw new Error('Invalid file id');
+
+      const tasks = await getTasksForFile(fileId);
+      return Response.json({ tasks }, { status: 200 });
+    },
+
     "/upload": async (req) => {
       const formData = await req.formData();
       const __file = formData.get('file');
