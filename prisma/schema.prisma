@@ -38,7 +38,7 @@ model files {
    * }
    * ```
    */
-  metadata Json?
+  metadata String?
 }
 
 model tasks {

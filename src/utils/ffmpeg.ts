@@ -1,45 +1,11 @@
 import { $ } from 'bun';
-import path from "path";
-import { getTask, markPendingTasksForFileAsUnreachable, type Task, updateTask } from './tasks';
+import path from 'path';
+import { getTask, logTask, markPendingTasksForFileAsUnreachable, updateTask } from './tasks';
 import { getFile, updateFile } from './files';
-import type {
-  CutEndOperation,
-  ExtractAudioOperation,
-  TranscodeOperation,
-  TrimOperation,
-} from '../schemas.ts';
 import { downloadFromS3ToDisk, spaces, uploadToS3FromDisk } from './s3.ts';
+import { after } from './queue-bg.ts';
 
 const tempDir = "./data/temp";
-
-export async function runOperation(operation: Task['operation'], jsonArgs: string, fileId: string, taskId: string) {
-  const userFile = await getFile(fileId);
-  if (!userFile) {
-    throw  new Error(`No user file found`);
-  }
-
-  const inputPath = userFile.file_path;
-  switch (operation) {
-    case 'transcode': {
-      const args = JSON.parse(jsonArgs) as TranscodeOperation;
-      transcode(inputPath, args.format, taskId);
-    } break;
-    case 'trim': {
-      const args = JSON.parse(jsonArgs) as TrimOperation;
-      trim(inputPath, args.start, args.duration, args.outputFormat, taskId);
-    }  break;
-    case 'cut-end': {
-      const args = JSON.parse(jsonArgs) as CutEndOperation;
-      await cutEnd(inputPath, args.duration, args.outputFormat, taskId);
-    } break;
-    case 'extract-audio': {
-      const args = JSON.parse(jsonArgs) as ExtractAudioOperation;
-      extractAudio(inputPath, args.audioFormat, taskId);
-    } break;
-    default:
-      throw new Error(`Unhandled operation: ${operation}`);
-  }
-}
 
 export function transcode(s3Path: string, outputFormat: string, taskId: string) {
   void handleS3DownAndUp({
@@ -131,7 +97,6 @@ export async function getVideoMetadata(s3Path: string) {
   };
 }
 
-
 export async function getAudioMetadata(s3Path: string) {
   const inputPath = path.join(tempDir, s3Path);
   await downloadFromS3ToDisk(s3Path, inputPath);
@@ -167,25 +132,29 @@ export async function getAudioMetadata(s3Path: string) {
   };
 }
 
+export async function updateFileMetadataById(fileId: string) {
+  const file = await getFile(fileId);
+  if (!file) throw new Error(`File ${fileId} not found!`);
 
-async function runFFmpeg(args: string[], taskId: string) {
-  const task = await getTask(taskId);
+  const s3File = spaces.file(file.file_path);
+  if (!(await s3File.exists())) throw new Error(`S3 File ${file.file_path} not found!`);
 
-  if (!task) throw new Error(`Task ${taskId} not found!`);
+  const mimeType = s3File.type;
 
-  const ffmpeg = Bun.spawn(["ffmpeg", ...args], {
-    timeout: 1000 * 60 * 15, // 15 minutes
-    onExit: async (_sub, exitCode: number | null, sigCode) => {
-      if (exitCode === 0) {
-        await updateTask(taskId, { status: "completed" });
-      } else {
-        await updateTask(taskId, { status: "failed", error: `FFmpeg exited with code: ${exitCode} & signal ${sigCode}` });
-        await markPendingTasksForFileAsUnreachable(task.file_id);
-      }
-    }
-  });
+  const isVideo = mimeType.startsWith('video/');
+  const isAudio = mimeType.startsWith('audio/');
 
-  await updateTask(taskId, { status: "processing", pid: ffmpeg.pid });
+  if (isVideo) {
+    const meta = await getVideoMetadata(file.file_path);
+    return updateFile(fileId, { mime_type: mimeType, metadata: JSON.stringify(meta) });
+  }
+
+  if (isAudio) {
+    const meta = await getAudioMetadata(file.file_path);
+    return updateFile(fileId, { mime_type: mimeType, metadata: JSON.stringify(meta) });
+  }
+
+  throw new Error(`File ${fileId} has unknown type: ${mimeType}`);
 }
 
 interface Params {
@@ -211,9 +180,27 @@ async function handleS3DownAndUp(params: Params) {
       throw new Error(`Task ${taskId} not found!`);
     }
 
-   await updateFile(task.file_id, { file_path: outputPath });
-   const s3File = spaces.file(s3Path);
-   await s3File.delete();
+    const file = await getFile(task.file_id);
+    if (!file) {
+      // noinspection ExceptionCaughtLocallyJS
+      throw new Error(`File ${task.file_id} not found!`);
+    }
+
+    const oldExt = path.extname(file.file_name);
+    const cleanName = path.basename(`${tempDir}/${file.file_name}`, oldExt);
+
+    const newExt = path.extname(outputFile);
+    const newName = `${cleanName}${newExt}`;
+
+    await updateFile(task.file_id, { file_name: newName, file_path: outputFile });
+    await updateTask(taskId, { status: 'completed' });
+
+    const s3File = spaces.file(s3Path);
+    await s3File.delete();
+
+    after(async () => {
+      await updateFileMetadataById(file.id);
+    });
 
   } catch (err) {
     error = err;
@@ -231,5 +218,31 @@ async function cleanUpFile(path: string) {
 
   if (await file.exists()) {
     await file.delete();
+  }
+}
+
+async function runFFmpeg(args: string[], taskId: string) {
+  const task = await getTask(taskId);
+
+  if (!task) throw new Error(`Task ${taskId} not found!`);
+
+  logTask(taskId, 'Running ffmpeg...');
+
+  const proc = Bun.spawn(["ffmpeg", ...args], {
+    timeout: 1000 * 60 * 15, // 15 minutes
+  });
+
+  await updateTask(taskId, { status: "processing", pid: proc.pid });
+  await proc.exited;
+
+  if (proc.exitCode !== 0) {
+    const error = await new Response(proc.stderr).text();
+    logTask(taskId, `ffmpeg finished with exit code ${proc.exitCode} (${proc.signalCode})`);
+    console.log('error', error);
+    await updateTask(taskId, { status: "failed", error });
+    await markPendingTasksForFileAsUnreachable(task.file_id);
+    throw new Error(error);
+  } else {
+    logTask(taskId, 'ffmpeg finished with exit code 0');
   }
 }

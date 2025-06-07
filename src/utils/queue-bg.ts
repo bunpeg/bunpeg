@@ -6,20 +6,21 @@ export async function startBgQueue() {
 
   while (true) {
     if (tasks.length >= MAX_CONCURRENT_TASKS || tasks.length === 0) {
-      await Bun.sleep(500); // allow time for running tasks to finish
+      await Bun.sleep(1000); // allow time for running tasks to finish
       continue;
     }
 
     const task = tasks.shift();
     if (!task) {
-      await Bun.sleep(500);
+      await Bun.sleep(1000);
       continue;
     }
 
     try {
       await task()
     } catch (error) {
-      console.error('Failed to execute bg task', error);
+      console.error('Failed to execute bg task');
+      console.error(error);
     }
   }
 }

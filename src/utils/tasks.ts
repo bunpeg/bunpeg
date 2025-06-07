@@ -98,3 +98,14 @@ export async function deleteAllTasksForFile(fileId: string) {
   // query.run(fileId);
   await sql`DELETE FROM tasks WHERE file_id = ${fileId}`;
 }
+
+export async function restoreAllProcessingTasksToQueued() {
+  await sql`UPDATE tasks SET status = 'queued' WHERE status = 'processing'`;
+}
+
+export function logTask(taskId: string, message: string) {
+  console.log('----------START---------');
+  console.log('Task: ', taskId);
+  console.log(message);
+  console.log('---------END----------');
+}

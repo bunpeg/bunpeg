@@ -13,8 +13,8 @@ export async function getFile(fileId: string) {
   return query[0] as UserFile | undefined;
 }
 
-export async function createFile(fileId: string, fileName: string, filePath: string, mimeType: string) {
-  await sql`INSERT INTO files ${sql({ id: fileId, file_name: fileName, file_path: filePath, mime_type: mimeType })}`;
+export async function createFile(newFile: Exclude<UserFile, 'metadata'>) {
+  await sql`INSERT INTO files ${sql(newFile)}`;
 }
 
 export async function updateFile(fileId: string, file: Partial<Exclude<UserFile, 'id'>>) {
