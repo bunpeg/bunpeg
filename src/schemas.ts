@@ -3,13 +3,13 @@ import { z } from "zod";
 // Shared param-only schemas for chaining (no 'fileId', no 'type')
 
 const TrimParams = z.object({
-  start: z.string().min(1, "Start time is required"),
-  duration: z.string().min(1, "Duration is required"),
+  start: z.number({ required_error: "Start time is required" }),
+  duration: z.number({ required_error: "Duration is required" }),
   outputFormat: z.string().min(1, "Output format is required"),
 });
 
 const CutEndParams = z.object({
-  duration: z.string().min(1, "Duration is required"),
+  duration: z.number({ required_error: "Duration is required" }),
   outputFormat: z.string().min(1, "Output format is required"),
 });
 

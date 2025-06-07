@@ -11,14 +11,14 @@ import upload from './www/upload.html';
 import {
   bulkCreateTasks,
   createTask,
-  deleteAllTasksForFile, getTask,
+  deleteAllTasksForFile,
   getTasksForFile,
   restoreAllProcessingTasksToQueued,
-  type Task, updateTask,
+  type Task,
 } from './utils/tasks.ts';
 import { createFile, deleteFile, getFile } from './utils/files.ts';
 import { ChainSchema, CutEndSchema, ExtractAudioSchema, TranscodeSchema, TrimSchema } from './schemas.ts';
-import { startFFQueue, stopFFQueue } from './utils/queue-ff.ts';
+import { startFFQueue } from './utils/queue-ff.ts';
 import { after, startBgQueue } from './utils/queue-bg.ts';
 import { spaces } from './utils/s3.ts';
 import { getFileMetadata, updateFileMetadata } from './utils/ffmpeg.ts';
@@ -50,7 +50,7 @@ const server = serve({
     },
 
     "/tasks": async () => {
-      const tasks = await sql`SELECT * FROM tasks ORDER BY created_at`;
+      const tasks = await sql`SELECT * FROM tasks ORDER BY created_at DESC`;
       return Response.json({ tasks }, { status: 200 });
     },
 
@@ -311,41 +311,105 @@ const server = serve({
       }
     },
 
-    "/trim": async (req) => {
-      const parsed = TrimSchema.safeParse(await req.json());
-
-      if (!parsed.success) {
-        return Response.json(parsed.error, { status: 400 });
+    "/trim": {
+      OPTIONS: async () => {
+        return new Response('OK', {
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
+          },
+        });
+      },
+      POST: async (req) => {
+        const parsed = TrimSchema.safeParse(await req.json());
+  
+        if (!parsed.success) {
+          return Response.json(parsed.error, { 
+            status: 400,
+            headers: {
+              "Access-Control-Allow-Origin": "*",
+              "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+              "Access-Control-Allow-Headers": "Content-Type, Authorization",
+            },
+          });
+        }
+  
+        const { fileId, start, duration, outputFormat } = parsed.data;
+  
+        const userFile = await getFile(fileId);
+        if (!userFile || !(await spaces.file(userFile.file_path).exists())) {
+          return new Response("File not found", { 
+            status: 404,
+            headers: {
+              "Access-Control-Allow-Origin": "*",
+              "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+              "Access-Control-Allow-Headers": "Content-Type, Authorization",
+            },
+          });
+        }
+  
+        await createTask(fileId, 'trim', { start, duration, outputFormat });
+        return Response.json({ success: true }, { 
+          status: 200,
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
+          },
+        });
       }
-
-      const { fileId, start, duration, outputFormat } = parsed.data;
-
-      const userFile = await getFile(fileId);
-      if (!userFile || !(await spaces.file(userFile.file_path).exists())) {
-        return new Response("File not found", { status: 404 });
-      }
-
-      await createTask(fileId, 'trim', { start, duration, outputFormat });
-      return Response.json({ success: true }, { status: 200 });
     },
 
-    "/trim-end": async (req) => {
-      const parsed = CutEndSchema.safeParse(await req.json());
-
-      if (!parsed.success) {
-        return Response.json(parsed.error, { status: 400 });
+    "/trim-end": {
+      OPTIONS: async () => {
+        return new Response('OK', {
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
+          },
+        });
+      },
+      POST: async (req) => {
+        const parsed = CutEndSchema.safeParse(await req.json());
+  
+        if (!parsed.success) {
+          return Response.json(parsed.error, { 
+            status: 400,
+            headers: {
+              "Access-Control-Allow-Origin": "*",
+              "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+              "Access-Control-Allow-Headers": "Content-Type, Authorization",
+            },
+          });
+        }
+  
+        const { fileId, duration, outputFormat } = parsed.data;
+  
+        const userFile = await getFile(fileId);
+  
+        if (!userFile || !(await spaces.file(userFile.file_path).exists())) {
+          return new Response('File not found', { 
+            status: 400,
+            headers: {
+              "Access-Control-Allow-Origin": "*",
+              "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+              "Access-Control-Allow-Headers": "Content-Type, Authorization",
+            },
+         });
+        }
+  
+        await createTask(fileId, 'cut-end', { duration, outputFormat });
+        return Response.json({ success: true }, { 
+          status: 200,
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
+          },
+        });
       }
-
-      const { fileId, duration, outputFormat } = parsed.data;
-
-      const userFile = await getFile(fileId);
-
-      if (!userFile || !(await spaces.file(userFile.file_path).exists())) {
-        return new Response('File not found', { status: 400 });
-      }
-
-      await createTask(fileId, 'cut-end', { duration, outputFormat });
-      return Response.json({ success: true }, { status: 200 });
     },
 
     "/extract-audio": async (req) => {
