@@ -11,10 +11,10 @@ import upload from './www/upload.html';
 import {
   bulkCreateTasks,
   createTask,
-  deleteAllTasksForFile,
+  deleteAllTasksForFile, getTask,
   getTasksForFile,
   restoreAllProcessingTasksToQueued,
-  type Task,
+  type Task, updateTask,
 } from './utils/tasks.ts';
 import { createFile, deleteFile, getFile } from './utils/files.ts';
 import { ChainSchema, CutEndSchema, ExtractAudioSchema, TranscodeSchema, TrimSchema } from './schemas.ts';
@@ -269,6 +269,18 @@ const server = serve({
           },
         });
       }
+    },
+
+    "/task/:taskId/update": async (req) => {
+      const taskId = req.params.taskId;
+      if (!taskId) throw new Error('Invalid task id');
+
+      const task = await getTask(taskId);
+      if (!task) throw new Error('Task not found');
+
+      await updateTask(task.id, { status: 'failed' });
+
+      return new Response('OK');
     },
 
     "/transcode":  {

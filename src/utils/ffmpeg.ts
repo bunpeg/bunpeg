@@ -4,6 +4,8 @@ import { getTask, logTask, markPendingTasksForFileAsUnreachable, updateTask } fr
 import { getFile, updateFile } from './files';
 import { downloadFromS3ToDisk, spaces, uploadToS3FromDisk } from './s3.ts';
 import { tryCatch } from './promises.ts';
+import { after } from './queue-bg.ts';
+import { removeFileLock, removeTaskFromQueue } from './queue-ff.ts';
 
 const tempDir = "./data/temp";
 
@@ -221,17 +223,19 @@ async function handleS3DownAndUp(params: Params) {
         metadata: JSON.stringify(data.meta),
       } : {})
     });
-    await updateTask(taskId, { status: 'completed' });
-
-    const s3File = spaces.file(s3Path);
-    await s3File.delete();
+    await removeFileLock(file.id);
   } catch (err) {
     error = err;
   }
-  // finally {
-  //   await cleanUpFile(inputPath);
-  //   await cleanUpFile(outputPath);
-  // }
+
+  logTask(taskId, 'Finished processing');
+
+  after(async () => {
+    const s3File = spaces.file(s3Path);
+    await s3File.delete();
+    await cleanUpFile(inputPath);
+    await cleanUpFile(outputPath);
+  });
 
   if (error) throw error;
 }
@@ -263,8 +267,11 @@ async function runFFmpeg(args: string[], taskId: string) {
     console.log('error', error);
     await updateTask(taskId, { status: "failed", error });
     await markPendingTasksForFileAsUnreachable(task.file_id);
+    await removeTaskFromQueue(taskId);
     throw new Error(error);
-  } else {
-    logTask(taskId, 'ffmpeg finished with exit code 0');
   }
+
+  await updateTask(taskId, { status: 'completed' });
+  await removeTaskFromQueue(taskId);
+  logTask(taskId, 'ffmpeg finished with exit code 0');
 }
