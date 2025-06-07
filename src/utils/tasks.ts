@@ -10,6 +10,7 @@ export interface Task {
   status: 'queued' | 'processing' | 'completed' | 'failed' | 'unreachable';
   pid?: number;
   error?: string;
+  created_at: string;
 }
 
 export async function getTask(taskId: string) {
@@ -22,13 +23,14 @@ export async function getNextPendingTask(params: { excludeFileIds: string[] }) {
   const query = await sql`
     SELECT *
     FROM tasks
-    WHERE status = 'queued' ${fileIdsFilter}`;
+    WHERE status = 'queued' ${fileIdsFilter}
+    ORDER BY created_at`;
 
   return query[0] as Task | undefined;
 }
 
 export async function getTasksForFile(fileId: string) {
-  return (await sql`SELECT * FROM tasks WHERE file_id = ${fileId}`) as Task[];
+  return (await sql`SELECT * FROM tasks WHERE file_id = ${fileId} ORDER BY created_at`) as Task[];
 }
 
 export async function createTask(fileId: string, operation: Task['operation'], args: Operations) {
@@ -38,6 +40,7 @@ export async function createTask(fileId: string, operation: Task['operation'], a
     status: 'queued',
     operation,
     args: JSON.stringify(args),
+    created_at: new Date().toISOString()
   })}`
 }
 
@@ -53,7 +56,7 @@ export async function bulkCreateTasks(tasks: { fileId: string, operation: Task['
   await sql`INSERT INTO tasks ${sql(dbInput)}`
 }
 
-export async function updateTask(taskId: string, task: Partial<Exclude<Task, 'id'>>) {
+export async function updateTask(taskId: string, task: Partial<Omit<Task, 'id'>>) {
   await sql`UPDATE tasks SET ${sql(task)} WHERE id = ${taskId}`;
 }
 

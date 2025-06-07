@@ -18,7 +18,7 @@ import {
 } from './utils/tasks.ts';
 import { createFile, deleteFile, getFile } from './utils/files.ts';
 import { ChainSchema, CutEndSchema, ExtractAudioSchema, TranscodeSchema, TrimSchema } from './schemas.ts';
-import { startFFQueue } from './utils/queue-ff.ts';
+import { startFFQueue, stopFFQueue } from './utils/queue-ff.ts';
 import { after, startBgQueue } from './utils/queue-bg.ts';
 import { spaces } from './utils/s3.ts';
 import { getFileMetadata, updateFileMetadata } from './utils/ffmpeg.ts';
@@ -31,8 +31,8 @@ fs.mkdirSync(tempDir, { recursive: true });
 
 await restoreAllProcessingTasksToQueued();
 
-void startFFQueue();
-void startBgQueue();
+startFFQueue();
+startBgQueue();
 
 const server = serve({
   routes: {
@@ -45,16 +45,20 @@ const server = serve({
     },
 
     "/files": async () => {
-      const files = await sql`SELECT * FROM files`;
+      const files = await sql`SELECT * FROM files ORDER BY created_at`;
       return Response.json({ files }, { status: 200 });
     },
 
-    "/tasks/:fileId": async (req) => {
-      const fileId = req.params.fileId;
-      if (!fileId) throw new Error('Invalid file id');
-
-      const tasks = await getTasksForFile(fileId);
+    "/tasks": async () => {
+      const tasks = await sql`SELECT * FROM tasks ORDER BY created_at`;
       return Response.json({ tasks }, { status: 200 });
+    },
+
+    "/queue/restart": async () => {
+      stopFFQueue();
+      await restoreAllProcessingTasksToQueued();
+      startFFQueue();
+      return new Response('ok');
     },
 
     "/upload": {

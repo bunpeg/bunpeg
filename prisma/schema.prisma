@@ -38,17 +38,19 @@ model files {
    * }
    * ```
    */
-  metadata String?
+  metadata   String?
+  created_at DateTime @default(now())
 }
 
 model tasks {
-  id        String  @id
-  file_id   String
-  pid       Int?
-  operation String // 'transcode' | 'trim' | 'cut-end' | 'extract-audio'
-  args      String // stringigied JSON with the operations args (matches the schema for the operation)
-  status    String // 'queued' | 'processing' | 'completed' | 'failed' | 'unreachable'
-  error     String?
+  id         String   @id
+  file_id    String
+  pid        Int?
+  operation  String // 'transcode' | 'trim' | 'cut-end' | 'extract-audio'
+  args       String // stringigied JSON with the operations args (matches the schema for the operation)
+  status     String // 'queued' | 'processing' | 'completed' | 'failed' | 'unreachable'
+  error      String?
+  created_at DateTime @default(now())
 
   @@index([file_id])
 }

@@ -6,6 +6,7 @@ export interface UserFile {
   file_path: string;
   mime_type: string;
   metadata?: string | null;
+  created_at: string;
 }
 
 export async function getFile(fileId: string) {
@@ -13,11 +14,11 @@ export async function getFile(fileId: string) {
   return query[0] as UserFile | undefined;
 }
 
-export async function createFile(newFile: Exclude<UserFile, 'metadata'>) {
-  await sql`INSERT INTO files ${sql(newFile)}`;
+export async function createFile(newFile: Omit<UserFile, 'metadata' | 'created_at'>) {
+  await sql`INSERT INTO files ${sql({ ...newFile, created_at: new Date().toISOString() })}`;
 }
 
-export async function updateFile(fileId: string, file: Partial<Exclude<UserFile, 'id'>>) {
+export async function updateFile(fileId: string, file: Partial<Omit<UserFile, 'id' | 'created_at'>>) {
   await sql`UPDATE files SET ${sql(file)} WHERE id = ${fileId}`;
 }
 

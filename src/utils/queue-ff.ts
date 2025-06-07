@@ -1,4 +1,4 @@
-import { getNextPendingTask, logTask, markPendingTasksForFileAsUnreachable, type Task, updateTask } from './tasks.ts';
+import { getNextPendingTask, markPendingTasksForFileAsUnreachable, type Task, updateTask } from './tasks.ts';
 import { getFile } from './files.ts';
 import { cutEnd, extractAudio, transcode, trim } from './ffmpeg.ts';
 import type { CutEndOperation, ExtractAudioOperation, TranscodeOperation, TrimOperation } from '../schemas.ts';
@@ -8,49 +8,52 @@ const MAX_CONCURRENT_TASKS = Number(process.env.MAX_CONCURRENT_TASKS);
 
 const activeTasks = new Set<string>();
 const lockedFiles = new Set<string>();
+let timerRef: NodeJS.Timeout;
 
-export async function startFFQueue() {
-  console.log("FFmpeg Queue started. Max concurrency:", MAX_CONCURRENT_TASKS);
+export function startFFQueue() {
+  logQueueMessage(`Started Queue with max concurrency: ${MAX_CONCURRENT_TASKS}`);
+  timerRef = setInterval(executePass, 1000);
+}
 
-  while (true) {
-    logQueueMessage(`executing pass | active tasks: ${lockedFiles.size} | locked files: ${lockedFiles.size}`);
-    if (activeTasks.size >= MAX_CONCURRENT_TASKS) {
-      logQueueMessage('queue maxed out, going to sleep...')
-      await Bun.sleep(1000); // allow time for running tasks to finish
-      continue;
-    }
+export function stopFFQueue() {
+  if (timerRef) clearInterval(timerRef);
+}
 
-    // TODO: fetch multiple tasks (depending on availability of the queue) and start them all
-    const task = await getNextPendingTask({ excludeFileIds: Array.from(lockedFiles) });
-    if (!task) {
-      logQueueMessage('no pending task found, going to sleep...');
-      await Bun.sleep(1000);
-      continue;
-    }
-
-    logQueueMessage(`Picking up task: ${task.id} to ${task.operation}`);
-    const { error } = await tryCatch(updateTask(task.id, { status: 'processing' }));
-    if (error) {
-      logQueueMessage(`Failed to update task ${task.id} start processing, skipping cycle...`);
-      await Bun.sleep(1000);
-      continue;
-    }
-
-    // Track task
-    activeTasks.add(task.id);
-    lockedFiles.add(task.file_id);
-
-    runOperation(task.operation, task.args, task.file_id, task.id)
-      .catch(async (error) => {
-        logQueueMessage( `Failed to process task: ${task.id}`);
-        console.error(error);
-        await markPendingTasksForFileAsUnreachable(task.file_id);
-        await removeTaskFromQueue(task.id);
-        await removeFileLock(task.file_id);
-      });
-
-    console.log('completed cycle, restarting...');
+async function executePass() {
+  logQueueMessage(`executing pass | active tasks: ${lockedFiles.size} | locked files: ${lockedFiles.size}`);
+  if (activeTasks.size >= MAX_CONCURRENT_TASKS) {
+    logQueueMessage('queue maxed out, going to sleep...')
+    return;
   }
+
+  // TODO: fetch multiple tasks (depending on availability of the queue) and start them all
+  const task = await getNextPendingTask({ excludeFileIds: Array.from(lockedFiles) });
+  if (!task) {
+    logQueueMessage('no pending task found, going to sleep...');
+    return;
+  }
+
+  logQueueMessage(`Picking up task: ${task.id} to ${task.operation}`);
+  const { error } = await tryCatch(updateTask(task.id, { status: 'processing' }));
+  if (error) {
+    logQueueMessage(`Failed to update task ${task.id} start processing, skipping cycle...`);
+    return;
+  }
+
+  // Track task
+  activeTasks.add(task.id);
+  lockedFiles.add(task.file_id);
+
+  runOperation(task.operation, task.args, task.file_id, task.id)
+    .catch(async (error) => {
+      logQueueMessage( `Failed to process task: ${task.id}`);
+      console.error(error);
+      await markPendingTasksForFileAsUnreachable(task.file_id);
+      await removeTaskFromQueue(task.id);
+      await removeFileLock(task.file_id);
+    });
+
+  console.log('completed cycle, restarting...');
 }
 
 export async function removeTaskFromQueue(taskId: string) {
