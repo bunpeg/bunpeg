@@ -12,7 +12,11 @@ let timerRef: NodeJS.Timeout;
 
 export function startFFQueue() {
   logQueueMessage(`Started Queue with max concurrency: ${MAX_CONCURRENT_TASKS}`);
-  timerRef = setInterval(executePass, 1000);
+  timerRef = setInterval(() => {
+    executePass().catch((err) => {
+      console.error('Error in executePass:', err);
+    });
+  }, 1000);
 }
 
 export function stopFFQueue() {
@@ -44,23 +48,26 @@ async function executePass() {
   activeTasks.add(task.id);
   lockedFiles.add(task.file_id);
 
-  runOperation(task.operation, task.args, task.file_id, task.id)
-    .catch(async (error) => {
-      logQueueMessage( `Failed to process task: ${task.id}`);
-      console.error(error);
-      await markPendingTasksForFileAsUnreachable(task.file_id);
-      await removeTaskFromQueue(task.id);
-      await removeFileLock(task.file_id);
-    });
+  try {
+    await runOperation(task.operation, task.args, task.file_id, task.id);
+  } catch (error) {
+    logQueueMessage(`Failed to process task: ${task.id}`);
+    console.error(error);
+    await markPendingTasksForFileAsUnreachable(task.file_id);
+    await removeTaskFromQueue(task.id);
+    await removeFileLock(task.file_id);
+  }
 
   console.log('completed cycle, restarting...');
 }
 
 export async function removeTaskFromQueue(taskId: string) {
+  logQueueMessage(`Removing task ${taskId} from queue`);
   activeTasks.delete(taskId);
 }
 
 export async function removeFileLock(fileId: string) {
+  logQueueMessage(`Removing file lock ${fileId}`);
   lockedFiles.delete(fileId);
 }
 
@@ -74,11 +81,11 @@ async function runOperation(operation: Task['operation'], jsonArgs: string, file
   switch (operation) {
     case 'transcode': {
       const args = JSON.parse(jsonArgs) as TranscodeOperation;
-      transcode(inputPath, args.format, taskId);
+      await transcode(inputPath, args.format, taskId);
     } break;
     case 'trim': {
       const args = JSON.parse(jsonArgs) as TrimOperation;
-      trim(inputPath, args.start, args.duration, args.outputFormat, taskId);
+      await trim(inputPath, args.start, args.duration, args.outputFormat, taskId);
     }  break;
     case 'cut-end': {
       const args = JSON.parse(jsonArgs) as CutEndOperation;
@@ -86,7 +93,7 @@ async function runOperation(operation: Task['operation'], jsonArgs: string, file
     } break;
     case 'extract-audio': {
       const args = JSON.parse(jsonArgs) as ExtractAudioOperation;
-      extractAudio(inputPath, args.audioFormat, taskId);
+      await extractAudio(inputPath, args.audioFormat, taskId);
     } break;
     default:
       throw new Error(`Unhandled operation: ${operation}`);

@@ -9,8 +9,8 @@ import { removeFileLock, removeTaskFromQueue } from './queue-ff.ts';
 
 const tempDir = "./data/temp";
 
-export function transcode(s3Path: string, outputFormat: string, taskId: string) {
-  void handleS3DownAndUp({
+export async function transcode(s3Path: string, outputFormat: string, taskId: string) {
+  return handleS3DownAndUp({
     taskId,
     s3Path,
     outputFile: `${taskId}.${outputFormat}`,
@@ -20,8 +20,8 @@ export function transcode(s3Path: string, outputFormat: string, taskId: string) 
   });
 }
 
-export function trim(s3Path: string, start: string, duration: string, outputFormat: string, taskId: string) {
-  void handleS3DownAndUp({
+export async function trim(s3Path: string, start: string, duration: string, outputFormat: string, taskId: string) {
+  return handleS3DownAndUp({
     taskId,
     s3Path,
     outputFile: `${taskId}.${outputFormat}`,
@@ -31,8 +31,8 @@ export function trim(s3Path: string, start: string, duration: string, outputForm
   });
 }
 
-export function extractAudio(s3Path: string, audioFormat: string, taskId: string) {
-  void handleS3DownAndUp({
+export async function extractAudio(s3Path: string, audioFormat: string, taskId: string) {
+  return handleS3DownAndUp({
     taskId,
     s3Path,
     outputFile: `${taskId}.${audioFormat}`,
@@ -43,7 +43,7 @@ export function extractAudio(s3Path: string, audioFormat: string, taskId: string
 }
 
 export async function cutEnd(s3Path: string, duration: string, outputFormat: string, taskId: string) {
-  void handleS3DownAndUp({
+  return handleS3DownAndUp({
     taskId,
     s3Path,
     outputFile: `${taskId}.${outputFormat}`,
