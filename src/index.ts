@@ -50,7 +50,7 @@ const server = serve({
           return new Response("Invalid content type", { status: 400 });
         }
 
-        const MAX_SIZE = 500 * 1024 * 1024; // 500MB
+        const MAX_SIZE = Number(process.env.MAX_FILE_SIZE_UPLOAD);
         let fileUploaded = true;
         let fileTooLarge = false;
         let fileId;
