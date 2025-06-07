@@ -53,7 +53,6 @@ const server = serve({
             "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
             "Access-Control-Allow-Headers": "Content-Type, Authorization",
-            "Access-Control-Max-Age": "86400",
           },
         });
       },
@@ -150,7 +149,6 @@ const server = serve({
               "Access-Control-Allow-Origin": "*",
               "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
               "Access-Control-Allow-Headers": "Content-Type, Authorization",
-              "Access-Control-Max-Age": "86400",
             },
           });
         }
@@ -162,7 +160,6 @@ const server = serve({
               "Access-Control-Allow-Origin": "*",
               "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
               "Access-Control-Allow-Headers": "Content-Type, Authorization",
-              "Access-Control-Max-Age": "86400",
             },
           });
         }
@@ -173,7 +170,6 @@ const server = serve({
             "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
             "Access-Control-Allow-Headers": "Content-Type, Authorization",
-            "Access-Control-Max-Age": "86400",
           },
         });
       }
@@ -226,6 +222,15 @@ const server = serve({
     },
 
     "/delete/:fileId": {
+      OPTIONS: async () => {
+        return new Response('OK', {
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
+          },
+        });
+      },
       DELETE: async (req) => {
         const fileId = req.params.fileId;
         if (!fileId) throw new Error('Invalid file id');
@@ -241,7 +246,14 @@ const server = serve({
         await deleteAllTasksForFile(fileId);
         await deleteFile(fileId);
 
-        return Response.json({ fileId }, { status: 200 });
+        return Response.json({ fileId }, {
+          status: 200,
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
+          },
+        });
       }
     },
 
