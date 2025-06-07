@@ -102,7 +102,7 @@ export async function getVideoMetadata(s3Path: string) {
     "ffprobe",
     "-v", "error",
     "-select_streams", "v:0",
-    "-show_entries", "format=duration,bit_rate",
+    "-show_entries", "format=duration,bit_rate,size",
     "-show_entries", "stream=width,height",
     "-of", "json",
     inputPath,
@@ -121,6 +121,7 @@ export async function getVideoMetadata(s3Path: string) {
   const format = result.format;
 
   return {
+    fileSize: format?.size ? parseInt(format.size, 10) : null,
     duration: format?.duration ? parseFloat(format.duration) : null,
     bitrate: format?.bit_rate ? parseInt(format.bit_rate, 10) : null,
     resolution: {
@@ -139,7 +140,7 @@ export async function getAudioMetadata(s3Path: string) {
     "ffprobe",
     "-v", "error",
     "-select_streams", "a:0",
-    "-show_entries", "format=duration,bit_rate",
+    "-show_entries", "format=duration,bit_rate,size",
     "-show_entries", "stream=sample_rate,channels",
     "-of", "json",
     inputPath,
@@ -158,6 +159,7 @@ export async function getAudioMetadata(s3Path: string) {
   const format = result.format;
 
   return {
+    fileSize: format?.size ? parseInt(format.size, 10) : null,
     duration: format?.duration ? parseFloat(format.duration) : null,
     bitrate: format?.bit_rate ? parseInt(format.bit_rate, 10) : null,
     sampleRate: stream?.sample_rate ? parseInt(stream.sample_rate, 10) : null,

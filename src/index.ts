@@ -15,6 +15,8 @@ import { after, startBgQueue } from './utils/queue-bg.ts';
 import { spaces } from './utils/s3.ts';
 import { getAudioMetadata, getVideoMetadata } from './utils/ffmpeg.ts';
 
+const MAX_FILE_SIZE_UPLOAD = Number(process.env.MAX_FILE_SIZE_UPLOAD);
+
 const tempDir = "./data/temp";
 fs.mkdirSync(tempDir, { recursive: true });
 
@@ -45,13 +47,22 @@ const server = serve({
     },
 
     "/upload": {
+      OPTIONS: async () => {
+        return new Response('OK', {
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
+            "Access-Control-Max-Age": "86400",
+          },
+        });
+      },
       POST: async (req) => {
         const contentType = req.headers.get("content-type") || "";
         if (!contentType.includes("multipart/form-data")) {
           return new Response("Invalid content type", { status: 400 });
         }
 
-        const MAX_SIZE = Number(process.env.MAX_FILE_SIZE_UPLOAD);
         let fileUploaded = true;
         let fileTooLarge = false;
         let isVideo = false;
@@ -89,7 +100,7 @@ const server = serve({
             for await (const chunk of fileStream) {
               uploadedSize += chunk.length;
 
-              if (uploadedSize > MAX_SIZE) {
+              if (uploadedSize > MAX_FILE_SIZE_UPLOAD) {
                 fileTooLarge = true;
                 break;
               }
@@ -133,45 +144,39 @@ const server = serve({
         bb.end();
 
         if (fileTooLarge) {
-          return new Response("File size exceeded limits", { status: 413 });
+          return new Response("File size exceeded limits", {
+            status: 413,
+            headers: {
+              "Access-Control-Allow-Origin": "*",
+              "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+              "Access-Control-Allow-Headers": "Content-Type, Authorization",
+              "Access-Control-Max-Age": "86400",
+            },
+          });
         }
 
         if (!fileUploaded) {
-          return new Response("Failed to upload the file", { status: 400 });
+          return new Response("Failed to upload the file", {
+            status: 400,
+            headers: {
+              "Access-Control-Allow-Origin": "*",
+              "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+              "Access-Control-Allow-Headers": "Content-Type, Authorization",
+              "Access-Control-Max-Age": "86400",
+            },
+          });
         }
 
-        return Response.json({ fileId }, { status: 200 });
+        return Response.json({ fileId }, {
+          status: 200,
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
+            "Access-Control-Max-Age": "86400",
+          },
+        });
       }
-    },
-
-    "/download/:fileId": async (req) => {
-      const fileId = req.params.fileId;
-      if (!fileId) throw new Error('Invalid file id');
-
-      const dbFile = await getFile(fileId);
-      console.log('dbFile', dbFile);
-      if (!dbFile?.file_name) throw new Error('Invalid file id');
-
-      const file = spaces.file(dbFile.file_path, { acl: 'public-read' });
-
-      after(async () => {
-        await file.delete();
-        await deleteAllTasksForFile(fileId);
-        await deleteFile(fileId);
-      });
-
-      return new Response(file);
-    },
-
-    "/output/:fileId": async (req) => {
-      const fileId = req.params.fileId;
-      if (!fileId) throw new Error('Invalid file id');
-
-      const dbFile = await getFile(fileId);
-      if (!dbFile?.file_name) throw new Error('Invalid file id');
-
-      const file = spaces.file(dbFile.file_path, { acl: 'public-read' });
-      return new Response(file);
     },
 
     "/status/:fileId": async (req) => {
@@ -190,34 +195,53 @@ const server = serve({
       return Response.json({ fileId, status: isPending ? 'pending' : lastTask.status },  { status: 200 });
     },
 
-    // "/meta/:fileId": async (req) => {
-    //   const fileId = req.params.fileId;
-    //   if (!fileId) throw new Error('Invalid file id');
-    //
-    //   const dbFile = await getFile(fileId);
-    //   console.log('dbFile', dbFile);
-    //   if (!dbFile?.file_name) throw new Error('Invalid file id');
-    //
-    //   let isVideo = false;
-    //   let isAudio = false;
-    //
-    //   if (dbFile.mime_type.startsWith("video/")) isVideo = true;
-    //   if (dbFile.mime_type.startsWith("audio/")) isAudio = true;
-    //
-    //     if (isVideo) {
-    //       const meta = await getVideoMetadata(dbFile.file_path);
-    //       await updateFile(fileId, { metadata: JSON.stringify(meta) });
-    //       return Response.json({ fileId, meta },  { status: 200 });
-    //     }
-    //
-    //     if (isAudio) {
-    //       const meta = await getAudioMetadata(dbFile.file_path);
-    //       await updateFile(fileId, { metadata: JSON.stringify(meta) });
-    //       return Response.json({ fileId, meta },  { status: 200 });
-    //     }
-    //
-    //   return Response.json({ fileId, meta: null },  { status: 200 });
-    // },
+    "/output/:fileId": async (req) => {
+      const fileId = req.params.fileId;
+      if (!fileId) throw new Error('Invalid file id');
+
+      const dbFile = await getFile(fileId);
+      if (!dbFile) throw new Error('Invalid file id');
+
+      const file = spaces.file(dbFile.file_path, { acl: 'public-read' });
+      return new Response(file);
+    },
+
+    "/download/:fileId": async (req) => {
+      const fileId = req.params.fileId;
+      if (!fileId) throw new Error('Invalid file id');
+
+      const dbFile = await getFile(fileId);
+      console.log('dbFile', dbFile);
+      if (!dbFile) throw new Error('Invalid file id');
+
+      const file = spaces.file(dbFile.file_path, { acl: 'public-read' });
+
+      after(async () => {
+        await file.delete();
+        await deleteAllTasksForFile(fileId);
+        await deleteFile(fileId);
+      });
+
+      return new Response(file);
+    },
+
+    "/delete/:fileId": async (req) => {
+      const fileId = req.params.fileId;
+      if (!fileId) throw new Error('Invalid file id');
+
+      const dbFile = await getFile(fileId);
+      if (!dbFile) throw new Error('Invalid file id');
+
+      const file = spaces.file(dbFile.file_path, { acl: 'public-read' });
+      if (await file.exists()) {
+        await file.delete();
+      }
+
+      await deleteAllTasksForFile(fileId);
+      await deleteFile(fileId);
+
+      return Response.json({ fileId }, { status: 200 });
+    },
 
     "/transcode":  async (req) => {
       const parsed = TranscodeSchema.safeParse(await req.json());
@@ -325,6 +349,7 @@ const server = serve({
       },
     });
   },
+  maxRequestBodySize: MAX_FILE_SIZE_UPLOAD,
   development: !!process.env.RAILWAY_PROJECT_ID,
 });
 
