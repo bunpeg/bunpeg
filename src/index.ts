@@ -21,7 +21,7 @@ import { ChainSchema, CutEndSchema, ExtractAudioSchema, TranscodeSchema, TrimSch
 import { startFFQueue } from './utils/queue-ff.ts';
 import { after, startBgQueue } from './utils/queue-bg.ts';
 import { spaces } from './utils/s3.ts';
-import { updateFileMetadataById } from './utils/ffmpeg.ts';
+import { getFileMetadata, updateFileMetadata } from './utils/ffmpeg.ts';
 
 const MAX_FILE_SIZE_UPLOAD = Number(process.env.MAX_FILE_SIZE_UPLOAD);
 
@@ -165,6 +165,11 @@ const server = serve({
           });
         }
 
+        after(async () => {
+          if (!fileId) return;
+          await updateFileMetadata(fileId);
+        })
+
         return Response.json({ fileId }, {
           status: 200,
           headers: {
@@ -174,6 +179,14 @@ const server = serve({
           },
         });
       }
+    },
+
+    "/meta/:fileId": async (req) => {
+      const fileId = req.params.fileId;
+      if (!fileId) throw new Error('Invalid file id');
+
+      const meta = await getFileMetadata(fileId);
+      return Response.json(meta, { status: 200 });
     },
 
     "/status/:fileId": async (req) => {

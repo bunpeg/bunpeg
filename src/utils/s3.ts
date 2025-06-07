@@ -10,15 +10,16 @@ export const spaces = new S3Client({
 });
 
 export async function downloadFromS3ToDisk(s3Path: string, localPath: string) {
-  const s3file = spaces.file(s3Path);
-  const stream = s3file.stream();
-  const writable = Bun.file(localPath).writer();
-
-  for await (const chunk of stream) {
-    writable.write(chunk);
-  }
-
-  await writable.end();
+  // const s3file = spaces.file(s3Path);
+  // const stream = s3file.stream();
+  // const writable = Bun.file(localPath).writer();
+  //
+  // for await (const chunk of stream) {
+  //   writable.write(chunk);
+  // }
+  //
+  // await writable.end();
+  await Bun.write(localPath, spaces.file(s3Path));
 }
 
 export async function uploadToS3FromDisk(localPath: string, s3Path: string) {

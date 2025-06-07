@@ -5,7 +5,7 @@ export interface UserFile {
   file_name: string;
   file_path: string;
   mime_type: string;
-  metadata?: string;
+  metadata?: string | null;
 }
 
 export async function getFile(fileId: string) {

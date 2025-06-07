@@ -3,7 +3,7 @@ import path from 'path';
 import { getTask, logTask, markPendingTasksForFileAsUnreachable, updateTask } from './tasks';
 import { getFile, updateFile } from './files';
 import { downloadFromS3ToDisk, spaces, uploadToS3FromDisk } from './s3.ts';
-import { after } from './queue-bg.ts';
+import { tryCatch } from './promises.ts';
 
 const tempDir = "./data/temp";
 
@@ -55,15 +55,60 @@ export async function cutEnd(s3Path: string, duration: string, outputFormat: str
   });
 }
 
-export async function getVideoDuration(filePath: string) {
+async function getVideoDuration(filePath: string) {
   const response = await $`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${filePath}"`;
   return parseFloat(response.text().trim());
 }
 
-export async function getVideoMetadata(s3Path: string) {
-  const inputPath = path.join(tempDir, s3Path);
-  await downloadFromS3ToDisk(s3Path, inputPath);
+export async function updateFileMetadata(fileId: string) {
+  const { meta, mimeType } = await getFileMetadata(fileId);
+  return updateFile(fileId, { mime_type: mimeType, metadata: JSON.stringify(meta) });
+}
 
+export async function getFileMetadata(fileId: string) {
+  const file = await getFile(fileId);
+  if (!file) throw new Error(`File ${fileId} not found!`);
+
+  const s3File = spaces.file(file.file_path);
+  if (!(await s3File.exists())) {
+    console.log('getFileMetadata - file not found on S3');
+    throw new Error(`S3 File ${file.file_path} not found!`);
+  }
+
+  const inputPath = path.join(tempDir, file.file_path);
+  await downloadFromS3ToDisk(file.file_path, inputPath);
+  const { data, error } = await tryCatch(getLocalFileMetadata(inputPath));
+  await cleanUpFile(inputPath);
+
+  if (error) throw error;
+  return data;
+}
+
+export async function getLocalFileMetadata(filePath: string) {
+  const localFile = Bun.file(filePath);
+  if (!await localFile.exists()) throw new Error(`File on ${filePath} not found!`);
+
+  const mimeType = localFile.type;
+
+  const isVideo = mimeType.startsWith('video/');
+  const isAudio = mimeType.startsWith('audio/');
+
+  if (isVideo) {
+    const { data: meta, error } = await tryCatch(getVideoMetadata(filePath));
+    if (error) throw error;
+    return { meta, mimeType };
+  }
+
+  if (isAudio) {
+    const { data: meta, error } = await tryCatch(getAudioMetadata(filePath));
+    if (error) throw error;
+    return { meta, mimeType };
+  }
+
+  throw new Error(`File on ${filePath} has unknown type: ${mimeType}`);
+}
+
+async function getVideoMetadata(inputPath: string) {
   const proc = Bun.spawn([
     "ffprobe",
     "-v", "error",
@@ -75,7 +120,6 @@ export async function getVideoMetadata(s3Path: string) {
   ]);
 
   await proc.exited;
-  await cleanUpFile(inputPath);
 
   if (proc.exitCode !== 0) {
     const error = await new Response(proc.stderr).text();
@@ -97,10 +141,7 @@ export async function getVideoMetadata(s3Path: string) {
   };
 }
 
-export async function getAudioMetadata(s3Path: string) {
-  const inputPath = path.join(tempDir, s3Path);
-  await downloadFromS3ToDisk(s3Path, inputPath);
-
+async function getAudioMetadata(inputPath: string) {
   const proc = Bun.spawn([
     "ffprobe",
     "-v", "error",
@@ -112,7 +153,6 @@ export async function getAudioMetadata(s3Path: string) {
   ]);
 
   await proc.exited;
-  await cleanUpFile(inputPath);
 
   if (proc.exitCode !== 0) {
     const error = await new Response(proc.stderr).text();
@@ -130,31 +170,6 @@ export async function getAudioMetadata(s3Path: string) {
     sampleRate: stream?.sample_rate ? parseInt(stream.sample_rate, 10) : null,
     channels: stream?.channels ?? null,
   };
-}
-
-export async function updateFileMetadataById(fileId: string) {
-  const file = await getFile(fileId);
-  if (!file) throw new Error(`File ${fileId} not found!`);
-
-  const s3File = spaces.file(file.file_path);
-  if (!(await s3File.exists())) throw new Error(`S3 File ${file.file_path} not found!`);
-
-  const mimeType = s3File.type;
-
-  const isVideo = mimeType.startsWith('video/');
-  const isAudio = mimeType.startsWith('audio/');
-
-  if (isVideo) {
-    const meta = await getVideoMetadata(file.file_path);
-    return updateFile(fileId, { mime_type: mimeType, metadata: JSON.stringify(meta) });
-  }
-
-  if (isAudio) {
-    const meta = await getAudioMetadata(file.file_path);
-    return updateFile(fileId, { mime_type: mimeType, metadata: JSON.stringify(meta) });
-  }
-
-  throw new Error(`File ${fileId} has unknown type: ${mimeType}`);
 }
 
 interface Params {
@@ -192,23 +207,31 @@ async function handleS3DownAndUp(params: Params) {
     const newExt = path.extname(outputFile);
     const newName = `${cleanName}${newExt}`;
 
-    await updateFile(task.file_id, { file_name: newName, file_path: outputFile });
+    const { data, error } = await tryCatch(getLocalFileMetadata(outputPath));
+    if (error) {
+      console.error('Could not resolve metadata for: ', outputPath);
+      console.error(error);
+    }
+
+    await updateFile(task.file_id, {
+      file_name: newName,
+      file_path: outputFile,
+      ...(data ? {
+        mime_type: data.mimeType,
+        metadata: JSON.stringify(data.meta),
+      } : {})
+    });
     await updateTask(taskId, { status: 'completed' });
 
     const s3File = spaces.file(s3Path);
     await s3File.delete();
-
-    after(async () => {
-      await updateFileMetadataById(file.id);
-    });
-
   } catch (err) {
     error = err;
   }
-  finally {
-    await cleanUpFile(inputPath);
-    await cleanUpFile(outputPath);
-  }
+  // finally {
+  //   await cleanUpFile(inputPath);
+  //   await cleanUpFile(outputPath);
+  // }
 
   if (error) throw error;
 }
@@ -223,7 +246,6 @@ async function cleanUpFile(path: string) {
 
 async function runFFmpeg(args: string[], taskId: string) {
   const task = await getTask(taskId);
-
   if (!task) throw new Error(`Task ${taskId} not found!`);
 
   logTask(taskId, 'Running ffmpeg...');

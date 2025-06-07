@@ -17,7 +17,7 @@ export async function startBgQueue() {
     }
 
     try {
-      await task()
+      await task();
     } catch (error) {
       console.error('Failed to execute bg task');
       console.error(error);
