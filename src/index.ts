@@ -225,22 +225,24 @@ const server = serve({
       return new Response(file);
     },
 
-    "/delete/:fileId": async (req) => {
-      const fileId = req.params.fileId;
-      if (!fileId) throw new Error('Invalid file id');
+    "/delete/:fileId": {
+      DELETE: async (req) => {
+        const fileId = req.params.fileId;
+        if (!fileId) throw new Error('Invalid file id');
 
-      const dbFile = await getFile(fileId);
-      if (!dbFile) throw new Error('Invalid file id');
+        const dbFile = await getFile(fileId);
+        if (!dbFile) throw new Error('Invalid file id');
 
-      const file = spaces.file(dbFile.file_path, { acl: 'public-read' });
-      if (await file.exists()) {
-        await file.delete();
+        const file = spaces.file(dbFile.file_path, { acl: 'public-read' });
+        if (await file.exists()) {
+          await file.delete();
+        }
+
+        await deleteAllTasksForFile(fileId);
+        await deleteFile(fileId);
+
+        return Response.json({ fileId }, { status: 200 });
       }
-
-      await deleteAllTasksForFile(fileId);
-      await deleteFile(fileId);
-
-      return Response.json({ fileId }, { status: 200 });
     },
 
     "/transcode":  async (req) => {
