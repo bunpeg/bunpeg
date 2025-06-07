@@ -1,7 +1,8 @@
 import { $, serve, sql } from 'bun';
+import path from 'path';
 import fs from 'fs';
-import { rm } from "node:fs/promises";
 import { nanoid } from 'nanoid';
+import Busboy from 'busboy';
 
 import docs from './www/docs.html';
 import upload from './www/upload.html';
@@ -11,10 +12,10 @@ import { createFile, deleteFile, getFile } from './utils/files.ts';
 import { ChainSchema, CutEndSchema, ExtractAudioSchema, TranscodeSchema, TrimSchema } from './schemas.ts';
 import { startFFQueue } from './utils/queue-ff.ts';
 import { after, startBgQueue } from './utils/queue-bg.ts';
+import { spaces } from './utils/s3.ts';
 
-const inputDir = "./data/bucket";
-
-fs.mkdirSync(inputDir, { recursive: true });
+const tempDir = "./data/temp";
+fs.mkdirSync(tempDir, { recursive: true });
 
 void startFFQueue();
 void startBgQueue();
@@ -27,14 +28,6 @@ const server = serve({
       const output = await $`ffmpeg -version`.text();
       const parts = output.split("\n");
       return new Response(parts[0]);
-    },
-
-    "/wipe": async () => {
-      await sql`DELETE FROM files`;
-      await sql`'DELETE FROM tasks`;
-      await rm(inputDir, { recursive: true, force: true });
-
-      return new Response(`Platform wiped!`);
     },
 
     "/files": async () => {
@@ -50,21 +43,84 @@ const server = serve({
       return Response.json({ tasks }, { status: 200 });
     },
 
-    "/upload": async (req) => {
-      const formData = await req.formData();
-      const __file = formData.get('file');
-      if (!__file) throw new Error('Must upload a file.');
+    "/upload": {
+      POST: async (req) => {
+        const contentType = req.headers.get("content-type") || "";
+        if (!contentType.includes("multipart/form-data")) {
+          return new Response("Invalid content type", { status: 400 });
+        }
 
-      const fileId = nanoid(8);
-      const file = __file as unknown as File;
-      const parts = file.name.split('.');
-      const extension = parts.pop();
-      const extendedName = `${parts.join('.')}-${fileId}.${extension}`;
+        const MAX_SIZE = 500 * 1024 * 1024; // 500MB
+        let fileUploaded = true;
+        let fileTooLarge = false;
+        let fileId;
+        const bb = Busboy({ headers: Object.fromEntries(req.headers), limits: { files: 1 } });
 
-      await createFile(fileId, file.name, `${inputDir}/${extendedName}`);
-      await Bun.write(`${inputDir}/${extendedName}`, file);
+        bb.on("file", async (_f, fileStream, info) => {
+          const { filename, mimeType } = info;
 
-      return Response.json({ fileId }, { status: 200 });
+          if (!mimeType.startsWith("video/") && !mimeType.startsWith("audio/")) {
+            fileStream.resume(); // Drain stream
+            bb.emit("error", new Error("Invalid file type. Only video/audio allowed."));
+            return;
+          }
+
+          const ext = path.extname(filename) || ".unknown";
+          fileId = nanoid(8);
+          const fileKey = `${fileId}${ext}`;
+          const s3File = spaces.file(fileKey);
+
+          // Stream to localFile
+          const writer = s3File.writer({
+            partSize: 5 * 1024 * 1024,
+            queueSize: 10,
+            retry: 3,
+          });
+
+          const executeWrite = async () => {
+            let uploadedSize = 0;
+            for await (const chunk of fileStream) {
+              uploadedSize += chunk.length;
+
+              if (uploadedSize > MAX_SIZE) {
+                fileTooLarge = true;
+                break;
+              }
+
+              writer.write(chunk);
+            }
+            await writer.end();
+          }
+
+          await executeWrite();
+          if (fileTooLarge) {
+            await s3File.delete();
+          } else {
+            await createFile(fileId, filename, fileKey);
+          }
+        });
+
+        bb.on("error", (err) => {
+          console.error("Upload error:", err);
+          fileUploaded = false;
+        });
+
+        const body = req.body as AsyncIterable<Uint8Array>;
+        for await (const chunk of body) {
+          bb.write(chunk);
+        }
+        bb.end();
+
+        if (fileTooLarge) {
+          return new Response("File size exceeded limits", { status: 413 });
+        }
+
+        if (!fileUploaded) {
+          return new Response("Failed to upload the file", { status: 400 });
+        }
+
+        return Response.json({ fileId }, { status: 200 });
+      }
     },
 
     "/download/:fileId": async (req) => {
@@ -75,7 +131,7 @@ const server = serve({
       console.log('dbFile', dbFile);
       if (!dbFile?.file_name) throw new Error('Invalid file id');
 
-      const file = Bun.file(dbFile.file_path);
+      const file = spaces.file(dbFile.file_path, { acl: 'public-read' });
 
       after(async () => {
         await file.delete();
@@ -83,11 +139,7 @@ const server = serve({
         await deleteFile(fileId);
       });
 
-      return new Response(file, {
-        headers: {
-          'content-disposition': `attachment; filename="${dbFile.file_name}"`,
-        },
-      });
+      return new Response(file);
     },
 
     "/output/:fileId": async (req) => {
@@ -97,13 +149,8 @@ const server = serve({
       const dbFile = await getFile(fileId);
       if (!dbFile?.file_name) throw new Error('Invalid file id');
 
-      const file = Bun.file(dbFile.file_path);
-
-      return new Response(file, {
-        headers: {
-          'content-disposition': `attachment; filename="${dbFile.file_name}"`,
-        },
-      });
+      const file = spaces.file(dbFile.file_path, { acl: 'public-read' });
+      return new Response(file);
     },
 
     "/status/:fileId": async (req) => {
@@ -132,7 +179,7 @@ const server = serve({
       const { fileId, format } = parsed.data;
       const file = await getFile(fileId);
 
-      if (!file || !fs.existsSync(file.file_path)) {
+      if (!file || !(await spaces.file(file.file_path).exists())) {
         return new Response("File not found", { status: 404 });
       }
 
@@ -150,7 +197,7 @@ const server = serve({
       const { fileId, start, duration, outputFormat } = parsed.data;
 
       const userFile = await getFile(fileId);
-      if (!userFile || !fs.existsSync(userFile.file_path)) {
+      if (!userFile || !(await spaces.file(userFile.file_path).exists())) {
         return new Response("File not found", { status: 404 });
       }
 
@@ -169,7 +216,7 @@ const server = serve({
 
       const userFile = await getFile(fileId);
 
-      if (!userFile || !fs.existsSync(userFile.file_path)) {
+      if (!userFile || !(await spaces.file(userFile.file_path).exists())) {
         return new Response('File not found', { status: 400 });
       }
 
@@ -187,7 +234,7 @@ const server = serve({
       const { fileId, audioFormat } = parsed.data;
       const userFile = await getFile(fileId);
 
-      if (!userFile || !fs.existsSync(userFile.file_path)) {
+      if (!userFile || !(await spaces.file(userFile.file_path).exists())) {
         return new Response("File not found", { status: 404 });
       }
 
@@ -203,7 +250,7 @@ const server = serve({
 
       const { fileId, operations } = parsed.data;
       const userFile = await getFile(fileId);
-      if (!userFile || !fs.existsSync(userFile.file_path)) {
+      if (!userFile || !(await spaces.file(userFile.file_path).exists())) {
         return new Response("File not found", { status: 404 });
       }
 

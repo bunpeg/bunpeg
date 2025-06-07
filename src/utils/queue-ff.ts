@@ -1,4 +1,4 @@
-import { getNextPendingTask, markPendingTasksAsUnreachableForFile, updateTask } from './tasks.ts';
+import { getNextPendingTask, markPendingTasksForFileAsUnreachable, updateTask } from './tasks.ts';
 import { runOperation } from './ffmpeg.ts';
 
 const MAX_CONCURRENT_TASKS = Number(process.env.MAX_CONCURRENT_TASKS);
@@ -31,7 +31,7 @@ export async function startFFQueue() {
     runOperation(task.operation, task.args, task.file_id, task.id)
       .catch((error) => {
         console.error(error);
-        markPendingTasksAsUnreachableForFile(task.file_id);
+        return markPendingTasksForFileAsUnreachable(task.file_id);
       })
       .finally(() => {
         activeTasks.delete(task.id);

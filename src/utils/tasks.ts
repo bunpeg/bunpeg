@@ -13,12 +13,12 @@ export interface Task {
   error?: string;
 }
 
-export function getTask(taskId: string) {
+export async function getTask(taskId: string) {
   // using db = connectDb();
   // using query = db.query<Task, string>('SELECT * FROM tasks WHERE id = ?');
   // return query.get(taskId);
 
-  const query = `SELECT * FROM tasks WHERE id = ${taskId}`;
+  const query = await sql`SELECT * FROM tasks WHERE id = ${taskId}`;
   return query[0] as Task | undefined;
 }
 
@@ -45,10 +45,10 @@ export async function getTasksForFile(fileId: string) {
   // using query = db.query<Task, string>('SELECT * FROM tasks WHERE file_id = ?');
   // return query.all(fileId);
 
-  return (await sql(`SELECT * FROM tasks WHERE file_id = ?`)) as Task[];
+  return (await sql`SELECT * FROM tasks WHERE file_id = ${fileId}`) as Task[];
 }
 
-export async function createTask(fileId: string, operation: Task['operation'], args: Operations, chainId?: string) {
+export async function createTask(fileId: string, operation: Task['operation'], args: Operations) {
   // using db = connectDb();
   // using query = db.query('INSERT INTO tasks (id, file_id, status, operation, args) VALUES (?, ?, ?, ?, ?)');
   // query.run(nanoid(8), fileId, 'queued', operation, JSON.stringify(args));
@@ -85,7 +85,7 @@ export async function updateTask(taskId: string, task: Partial<Exclude<Task, 'id
   await sql`UPDATE tasks SET ${sql(task)} WHERE id = ${taskId}`;
 }
 
-export async function markPendingTasksAsUnreachableForFile(fileId: string) {
+export async function markPendingTasksForFileAsUnreachable(fileId: string) {
   // using db = connectDb();
   // using query = db.query<Task, string[]>('UPDATE tasks SET status = ? WHERE file_id = ? and status = ?');
   // return query.all('unreachable', fileId, 'queued');
