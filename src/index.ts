@@ -412,43 +412,107 @@ const server = serve({
       }
     },
 
-    "/extract-audio": async (req) => {
-      const parsed = ExtractAudioSchema.safeParse(await req.json());
-
-      if (!parsed.success) {
-        return Response.json(parsed.error, { status: 400 });
+    "/extract-audio": {
+      OPTIONS: async () => {
+        return new Response('OK', {
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
+          },
+        });
+      },
+      POST: async (req) => {
+        const parsed = ExtractAudioSchema.safeParse(await req.json());
+  
+        if (!parsed.success) {
+          return Response.json(parsed.error, { 
+            status: 400,
+            headers: {
+              "Access-Control-Allow-Origin": "*",
+              "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+              "Access-Control-Allow-Headers": "Content-Type, Authorization",
+            },
+          });
+        }
+  
+        const { fileId, audioFormat } = parsed.data;
+        const userFile = await getFile(fileId);
+  
+        if (!userFile || !(await spaces.file(userFile.file_path).exists())) {
+          return new Response("File not found", { 
+            status: 404,
+            headers: {
+              "Access-Control-Allow-Origin": "*",
+              "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+              "Access-Control-Allow-Headers": "Content-Type, Authorization",
+            },
+          });
+        }
+  
+        await createTask(fileId, 'extract-audio', { audioFormat });
+        return Response.json({ success: true },  { 
+          status: 200,
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
+          },
+        });
       }
-
-      const { fileId, audioFormat } = parsed.data;
-      const userFile = await getFile(fileId);
-
-      if (!userFile || !(await spaces.file(userFile.file_path).exists())) {
-        return new Response("File not found", { status: 404 });
-      }
-
-      await createTask(fileId, 'extract-audio', { audioFormat });
-      return Response.json({ success: true },  { status: 200 });
     },
 
-    "/chain": async (req) => {
-      const parsed = ChainSchema.safeParse(await req.json());
-      if (!parsed.success) {
-        return Response.json(parsed.error, { status: 400 });
+    "/chain": {
+      OPTIONS: async () => {
+        return new Response('OK', {
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
+          },
+        });
+      },
+      POST: async (req) => {
+        const parsed = ChainSchema.safeParse(await req.json());
+        if (!parsed.success) {
+          return Response.json(parsed.error, { 
+            status: 400,
+            headers: {
+              "Access-Control-Allow-Origin": "*",
+              "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+              "Access-Control-Allow-Headers": "Content-Type, Authorization",
+            },
+          });
+        }
+  
+        const { fileId, operations } = parsed.data;
+        const userFile = await getFile(fileId);
+        if (!userFile || !(await spaces.file(userFile.file_path).exists())) {
+          return new Response("File not found", { 
+            status: 404,
+            headers: {
+              "Access-Control-Allow-Origin": "*",
+              "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+              "Access-Control-Allow-Headers": "Content-Type, Authorization",
+            },
+          });
+        }
+  
+        await bulkCreateTasks(operations.map(({ type: operation, ...args }) => ({
+          fileId,
+          operation,
+          args,
+        })))
+  
+        return Response.json({ success: true },  { 
+          status: 200,
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
+          },
+        });
       }
-
-      const { fileId, operations } = parsed.data;
-      const userFile = await getFile(fileId);
-      if (!userFile || !(await spaces.file(userFile.file_path).exists())) {
-        return new Response("File not found", { status: 404 });
-      }
-
-      await bulkCreateTasks(operations.map(({ type: operation, ...args }) => ({
-        fileId,
-        operation,
-        args,
-      })))
-
-      return Response.json({ success: true },  { status: 200 });
     },
   },
   fetch() {

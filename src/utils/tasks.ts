@@ -60,6 +60,10 @@ export async function updateTask(taskId: string, task: Partial<Omit<Task, 'id'>>
   await sql`UPDATE tasks SET ${sql(task)} WHERE id = ${taskId}`;
 }
 
+export async function updateTaskStatus(taskId: string, status: Task['status']) {
+  await sql`UPDATE tasks SET status = ${status} WHERE id = ${taskId}`;
+}
+
 export async function markPendingTasksForFileAsUnreachable(fileId: string) {
   await sql`UPDATE tasks SET status = 'unreachable' WHERE id = ${fileId} and status = 'queued'`;
 }

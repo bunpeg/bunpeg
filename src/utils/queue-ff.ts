@@ -1,4 +1,4 @@
-import { getNextPendingTask, markPendingTasksForFileAsUnreachable, type Task, updateTask } from './tasks.ts';
+import { getNextPendingTask, markPendingTasksForFileAsUnreachable, type Task, updateTaskStatus } from './tasks.ts';
 import { getFile } from './files.ts';
 import { cutEnd, extractAudio, transcode, trim } from './ffmpeg.ts';
 import type { CutEndOperation, ExtractAudioOperation, TranscodeOperation, TrimOperation } from '../schemas.ts';
@@ -44,7 +44,7 @@ async function executePass() {
   }
 
   logQueueMessage(`Picking up task: ${task.id} to ${task.operation}`);
-  const { error } = await tryCatch(updateTask(task.id, { status: 'processing' }));
+  const { error } = await tryCatch(updateTaskStatus(task.id, 'processing'));
   if (error) {
     logQueueMessage(`Failed to update task ${task.id} start processing, skipping cycle...`);
     return;

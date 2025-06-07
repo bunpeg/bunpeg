@@ -20,13 +20,13 @@ export async function transcode(s3Path: string, outputFormat: string, taskId: st
   });
 }
 
-export async function trim(s3Path: string, start: string, duration: string, outputFormat: string, taskId: string) {
+export async function trim(s3Path: string, start: number, duration: number, outputFormat: string, taskId: string) {
   return handleS3DownAndUp({
     taskId,
     s3Path,
     outputFile: `${taskId}.${outputFormat}`,
     operation: (inputPath, outputPath) => {
-      return runFFmpeg(['-i', inputPath, '-ss', start, '-t', duration, '-c', 'copy', outputPath], taskId);
+      return runFFmpeg(['-i', inputPath, '-ss', start.toString(), '-t', duration.toString(), '-c', 'copy', outputPath], taskId);
     },
   });
 }
@@ -42,14 +42,14 @@ export async function extractAudio(s3Path: string, audioFormat: string, taskId: 
   });
 }
 
-export async function cutEnd(s3Path: string, duration: string, outputFormat: string, taskId: string) {
+export async function cutEnd(s3Path: string, duration: number, outputFormat: string, taskId: string) {
   return handleS3DownAndUp({
     taskId,
     s3Path,
     outputFile: `${taskId}.${outputFormat}`,
     operation: async (inputPath, outputPath) => {
       const totalDuration = await getVideoDuration(inputPath);
-      const keepDuration = totalDuration - parseFloat(duration);
+      const keepDuration = totalDuration - duration;
       if (keepDuration <= 0) throw new Error("Resulting video would be empty");
 
       return runFFmpeg(["-i", inputPath, "-vn", "-acodec", "copy", outputPath], taskId)
