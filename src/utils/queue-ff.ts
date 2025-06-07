@@ -1,4 +1,4 @@
-import { getNextPendingTask, markPendingTasksForFileAsUnreachable, type Task, updateTaskStatus } from './tasks.ts';
+import { getNextPendingTask, markPendingTasksForFileAsUnreachable, type Task, updateTask } from './tasks.ts';
 import { getFile } from './files.ts';
 import { cutEnd, extractAudio, transcode, trim } from './ffmpeg.ts';
 import type { CutEndOperation, ExtractAudioOperation, TranscodeOperation, TrimOperation } from '../schemas.ts';
@@ -44,7 +44,7 @@ async function executePass() {
   }
 
   logQueueMessage(`Picking up task: ${task.id} to ${task.operation}`);
-  const { error } = await tryCatch(updateTaskStatus(task.id, 'processing'));
+  const { error } = await tryCatch(updateTask(task.id, { status: 'processing' }));
   if (error) {
     logQueueMessage(`Failed to update task ${task.id} start processing, skipping cycle...`);
     return;
@@ -91,11 +91,11 @@ async function runOperation(operation: Task['operation'], jsonArgs: string, file
     } break;
     case 'trim': {
       const args = JSON.parse(jsonArgs) as TrimOperation;
-      await trim(inputPath, args.start, args.duration, args.outputFormat, taskId);
+      await trim(inputPath, args.start.toString(), args.duration.toString(), args.outputFormat, taskId);
     }  break;
     case 'cut-end': {
       const args = JSON.parse(jsonArgs) as CutEndOperation;
-      await cutEnd(inputPath, args.duration, args.outputFormat, taskId);
+      await cutEnd(inputPath, args.duration.toString(), args.outputFormat, taskId);
     } break;
     case 'extract-audio': {
       const args = JSON.parse(jsonArgs) as ExtractAudioOperation;
