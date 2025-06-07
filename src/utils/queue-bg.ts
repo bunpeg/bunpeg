@@ -10,6 +10,7 @@ export async function startBgQueue() {
 
 export async function stopBgQueue() {
   shouldRun = false;
+  tasks.length = 0;
 }
 
 async function runBgQueueLoop() {

@@ -18,6 +18,8 @@ export function startFFQueue() {
 
 export function stopFFQueue() {
   shouldRun = false;
+  activeTasks.clear();
+  lockedFiles.clear();
 }
 
 async function runQueueLoop() {
