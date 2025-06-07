@@ -4,6 +4,8 @@ export interface UserFile {
   id: string;
   file_name: string;
   file_path: string;
+  mime_type: string;
+  metadata?: string;
 }
 
 export async function getFile(fileId: string) {
@@ -11,8 +13,8 @@ export async function getFile(fileId: string) {
   return query[0] as UserFile | undefined;
 }
 
-export async function createFile(fileId: string, fileName: string, filePath: string) {
-  await sql`INSERT INTO files ${sql({ id: fileId, file_name: fileName, file_path: filePath })}`;
+export async function createFile(fileId: string, fileName: string, filePath: string, mimeType: string) {
+  await sql`INSERT INTO files ${sql({ id: fileId, file_name: fileName, file_path: filePath, mime_type: mimeType })}`;
 }
 
 export async function updateFile(fileId: string, file: Partial<Exclude<UserFile, 'id'>>) {

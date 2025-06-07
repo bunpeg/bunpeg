@@ -15,6 +15,30 @@ model files {
   id        String @id
   file_name String
   file_path String
+  mime_type String
+  /**
+   * for videos:
+   * ```
+   * {
+   *    duration: number | null;
+   *    bitrate: number | null;
+   *    resolution: {
+   *      width: number | null;
+   *      height: number | null;
+   *    }
+   * }
+   * ```
+   * for audio:
+   * ```
+   * {
+   *    duration: number | null;
+   *    bitrate: number | null;
+   *    sampleRate: number | null;
+   *    channels: number | null;
+   * }
+   * ```
+   */
+  metadata Json?
 }
 
 model tasks {
