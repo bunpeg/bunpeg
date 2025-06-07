@@ -54,13 +54,6 @@ const server = serve({
       return Response.json({ tasks }, { status: 200 });
     },
 
-    "/queue/restart": async () => {
-      stopFFQueue();
-      await restoreAllProcessingTasksToQueued();
-      startFFQueue();
-      return new Response('ok');
-    },
-
     "/upload": {
       OPTIONS: async () => {
         return new Response('OK', {
@@ -273,18 +266,6 @@ const server = serve({
           },
         });
       }
-    },
-
-    "/task/:taskId/update": async (req) => {
-      const taskId = req.params.taskId;
-      if (!taskId) throw new Error('Invalid task id');
-
-      const task = await getTask(taskId);
-      if (!task) throw new Error('Task not found');
-
-      await updateTask(task.id, { status: 'failed' });
-
-      return new Response('OK');
     },
 
     "/transcode":  {
