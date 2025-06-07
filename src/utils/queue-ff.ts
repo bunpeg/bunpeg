@@ -8,19 +8,23 @@ const MAX_CONCURRENT_TASKS = Number(process.env.MAX_CONCURRENT_TASKS);
 
 const activeTasks = new Set<string>();
 const lockedFiles = new Set<string>();
-let timerRef: NodeJS.Timeout;
+let shouldRun = false;
 
 export function startFFQueue() {
   logQueueMessage(`Started Queue with max concurrency: ${MAX_CONCURRENT_TASKS}`);
-  timerRef = setInterval(() => {
-    executePass().catch((err) => {
-      console.error('Error in executePass:', err);
-    });
-  }, 1000);
+  shouldRun = true;
+  runQueueLoop();
 }
 
 export function stopFFQueue() {
-  if (timerRef) clearInterval(timerRef);
+  shouldRun = false;
+}
+
+async function runQueueLoop() {
+  while (shouldRun) {
+    await executePass();
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
 }
 
 async function executePass() {

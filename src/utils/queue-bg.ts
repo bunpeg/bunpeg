@@ -1,14 +1,22 @@
 const MAX_CONCURRENT_TASKS = Number(process.env.MAX_CONCURRENT_TASKS);
 const tasks: (() => Promise<void>)[] = [];
-let timerRef: NodeJS.Timeout;
+let shouldRun = false;
 
 export async function startBgQueue() {
   console.log("Background Queue started.");
-  timerRef = setInterval(executePass, 1000);
+  shouldRun = true;
+  runBgQueueLoop();
 }
 
 export async function stopBgQueue() {
-  if (timerRef) clearInterval(timerRef);
+  shouldRun = false;
+}
+
+async function runBgQueueLoop() {
+  while (shouldRun) {
+    await executePass();
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
 }
 
 async function executePass() {
