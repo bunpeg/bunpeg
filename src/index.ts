@@ -69,7 +69,7 @@ const server = serve({
       POST: async (req) => {
         const contentType = req.headers.get("content-type") || "";
         if (!contentType.includes("multipart/form-data")) {
-          return new Response("Invalid content type", { status: 400 });
+          return new Response("Invalid content type", { status: 400, headers: CORS_HEADERS });
         }
 
         let fileUploaded = true;
