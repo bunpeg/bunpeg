@@ -42,9 +42,6 @@ const CORS_HEADERS = {
 
 const server = serve({
   routes: {
-    "/": process.env.NODE_ENV === 'dev'
-      ? docs
-      : Response.redirect("https://bunpeg.io"),
     "/form": process.env.NODE_ENV === 'dev'
       ? upload
       : Response.redirect("https://bunpeg.io"),
@@ -53,7 +50,7 @@ const server = serve({
       const parts = output.split("\n");
       return new Response(parts[0]);
     },
-    "/openapi": async () => {
+    "/": async () => {
       const file = Bun.file(path.join(import.meta.dir, "www/docs.html"));
       return new Response(file);
     },
