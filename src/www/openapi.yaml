@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Bunpeg API
-  version: 1.1.0
+  version: 0.0.1
   description: A platform for performing FFmpeg operations via API endpoints.
 
 servers:
@@ -211,6 +211,29 @@ paths:
                   taskId:
                     type: string
 
+  /status/{fileId}:
+    get:
+      summary: Get status for a file's processing tasks
+      parameters:
+        - in: path
+          name: fileId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: File status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  fileId:
+                    type: string
+                  status:
+                    type: string
+                    enum: [pending, completed, failed, unreachable, not-found]
+
   /status/{taskId}:
     get:
       summary: Get task status
@@ -234,6 +257,39 @@ paths:
                   error:
                     type: string
                     nullable: true
+
+  /meta/{fileId}:
+    get:
+      summary: Get metadata for a file
+      parameters:
+        - in: path
+          name: fileId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: File metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  duration:
+                    type: number
+                  bitrate:
+                    type: number
+                  resolution:
+                    type: object
+                    properties:
+                      width:
+                        type: number
+                      height:
+                        type: number
+                  sampleRate:
+                    type: number
+                  channels:
+                    type: number
 
   /download/{fileId}:
     get:
@@ -270,3 +326,34 @@ paths:
               schema:
                 type: string
                 format: binary
+
+  /delete/{fileId}:
+    delete:
+      summary: Delete a file and all its tasks
+      parameters:
+        - in: path
+          name: fileId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: File deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  fileId:
+                    type: string
+
+  /ffmpeg/version:
+    get:
+      summary: Get the version of FFmpeg used by the server
+      responses:
+        '200':
+          description: FFmpeg version string
+          content:
+            text/plain:
+              schema:
+                type: string
