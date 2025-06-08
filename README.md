@@ -6,6 +6,9 @@ I ended up building it because I needed a way to run FFmpeg serverless and I cou
 
 PS: This is the first time I work with FFmpeg, so commands need a lot of tweaking.
 
+## How to test
+You can use this [link](bunpeg-front.vercel.app) to see it in action, it's a simple Next.js app that can perform the commands.
+
 ## Features
 - Upload video or audio files
 - Trim, transcode, or extract audio from media
