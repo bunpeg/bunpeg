@@ -1,20 +1,10 @@
 # bunpeg
 
-Bunpeg is a service for performing FFmpeg operations via simple HTTP API endpoints. You can upload media files (video or audio), run FFmpeg commands on them, and download the results. This service is built with [Bun](https://bun.sh).
+Bunpeg is a service for performing FFmpeg operations via HTTP. You can upload media files (video or audio), run FFmpeg commands on them, and download the results. This service is built with [Bun](https://bun.sh).
 
 I ended up building it because I needed a way to run FFmpeg serverless and I coun't make it work with Next.js or React, all of this for another side project :) .
 
 PS: This is the first time I work with FFmpeg, so commands need a lot of tweaking.
-
-## How to test
-You can use this [link](https://bunpeg.io) to see it in action, it's a simple Next.js app that can perform the commands.
-
-## Features
-- Upload video or audio files
-- Trim, transcode, or extract audio from media
-- Chain multiple FFmpeg operations in a single request
-- Download original or processed files
-- Check the status of processing tasks
 
 ## Installation
 
@@ -27,6 +17,16 @@ bun install
 ```bash
 bun run src/index.ts
 ```
+
+
+## Features
+- Upload video or audio files
+- Trim, transcode, or extract audio from media
+- Chain multiple FFmpeg operations in a single request
+- Download original or processed files
+- Check the status of processing tasks
+
+You can use the [playground](https://bunpeg.io/playground) to see it in action.
 
 ## API Endpoints (Minimal Docs)
 
