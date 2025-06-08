@@ -53,6 +53,18 @@ const server = serve({
       const parts = output.split("\n");
       return new Response(parts[0]);
     },
+    "/openapi": async () => {
+      const file = Bun.file(path.join(import.meta.dir, "www/docs.html"));
+      return new Response(file);
+    },
+    "/openapi.yaml": async () => {
+      const file = Bun.file(path.join(import.meta.dir, "www/openapi.yaml"));
+      return new Response(file, {
+        headers: {
+          "Content-Type": "application/yaml"
+        }
+      });
+    },
 
     "/files": async () => {
       const files = await sql`SELECT * FROM files ORDER BY created_at`;
