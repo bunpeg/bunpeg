@@ -42,14 +42,6 @@ const CORS_HEADERS = {
 
 const server = serve({
   routes: {
-    "/form": process.env.NODE_ENV === 'dev'
-      ? upload
-      : Response.redirect("https://bunpeg.io"),
-    "/ffmpeg/version": async () => {
-      const output = await $`ffmpeg -version`.text();
-      const parts = output.split("\n");
-      return new Response(parts[0]);
-    },
     "/": async () => {
       const file = Bun.file(path.join(import.meta.dir, "www/docs.html"));
       return new Response(file);
@@ -61,6 +53,14 @@ const server = serve({
           "Content-Type": "application/yaml"
         }
       });
+    },
+    "/form": process.env.NODE_ENV === 'dev'
+      ? upload
+      : Response.redirect("https://bunpeg.io"),
+    "/ffmpeg/version": async () => {
+      const output = await $`ffmpeg -version`.text();
+      const parts = output.split("\n");
+      return new Response(parts[0]);
     },
 
     "/files": async () => {
