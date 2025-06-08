@@ -56,7 +56,7 @@ const server = serve({
     },
     "/form": process.env.NODE_ENV === 'dev'
       ? upload
-      : Response.redirect("https://bunpeg.io"),
+      : Response.redirect("/"),
     "/ffmpeg/version": async () => {
       const output = await $`ffmpeg -version`.text();
       const parts = output.split("\n");
