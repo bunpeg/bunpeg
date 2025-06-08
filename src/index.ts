@@ -42,8 +42,12 @@ const CORS_HEADERS = {
 
 const server = serve({
   routes: {
-    "/": docs,
-    "/form": upload,
+    "/": process.env.NODE_ENV === 'dev'
+      ? docs
+      : Response.redirect("https://bunpeg.io"),
+    "/form": process.env.NODE_ENV === 'dev'
+      ? upload
+      : Response.redirect("https://bunpeg.io"),
     "/ffmpeg/version": async () => {
       const output = await $`ffmpeg -version`.text();
       const parts = output.split("\n");
