@@ -9,7 +9,7 @@ export interface UserFile {
   created_at: string;
 }
 
-export async function getFile(fileId: string) {
+export async function getFile(fileId: UserFile['id']) {
   const query = await sql`SELECT * FROM files WHERE id = ${fileId}`;
   return query[0] as UserFile | undefined;
 }
@@ -18,10 +18,10 @@ export async function createFile(newFile: Omit<UserFile, 'metadata' | 'created_a
   await sql`INSERT INTO files ${sql({ ...newFile, created_at: new Date().toISOString() })}`;
 }
 
-export async function updateFile(fileId: string, file: Partial<Omit<UserFile, 'id' | 'created_at'>>) {
+export async function updateFile(fileId: UserFile['id'], file: Partial<Omit<UserFile, 'id' | 'created_at'>>) {
   await sql`UPDATE files SET ${sql(file)} WHERE id = ${fileId}`;
 }
 
-export async  function deleteFile(fileId: string) {
+export async  function deleteFile(fileId: UserFile['id']) {
   await sql`DELETE FROM files WHERE id = ${fileId}`;
 }

@@ -50,7 +50,7 @@ export const TrimSchemaWithType = TrimParams.extend({
 });
 
 export const CutEndSchemaWithType = CutEndParams.extend({
-  type: z.literal("cut-end"),
+  type: z.literal("trim-end"),
 });
 
 export const ExtractAudioSchemaWithType = ExtractAudioParams.extend({

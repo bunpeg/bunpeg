@@ -1,58 +1,57 @@
 import { $ } from 'bun';
 import path from 'path';
-import { getTask, logTask, markPendingTasksForFileAsUnreachable, updateTask } from './tasks';
-import { getFile, updateFile } from './files';
+import { logTask, markPendingTasksForFileAsUnreachable, type Task, updateTask } from './tasks';
+import { getFile, updateFile, type UserFile } from './files';
 import { downloadFromS3ToDisk, spaces, uploadToS3FromDisk } from './s3.ts';
 import { tryCatch } from './promises.ts';
 import { after } from './queue-bg.ts';
-import { removeFileLock, removeTaskFromQueue } from './queue-ff.ts';
 
 const tempDir = "./data/temp";
 
-export async function transcode(s3Path: string, outputFormat: string, taskId: string) {
+export async function transcode(s3Path: string, outputFormat: string, task: Task) {
   return handleS3DownAndUp({
-    taskId,
+    task,
     s3Path,
-    outputFile: `${taskId}.${outputFormat}`,
+    outputFile: `${task.code}.${outputFormat}`,
     operation: (inputPath, outputPath) => {
-      return runFFmpeg(["-i", inputPath, outputPath], taskId);
+      return runFFmpeg(["-i", inputPath, outputPath], task);
     },
   });
 }
 
-export async function trim(s3Path: string, start: number, duration: number, outputFormat: string, taskId: string) {
+export async function trim(s3Path: string, start: number, duration: number, outputFormat: string, task: Task) {
   return handleS3DownAndUp({
-    taskId,
+    task,
     s3Path,
-    outputFile: `${taskId}.${outputFormat}`,
+    outputFile: `${task.code}.${outputFormat}`,
     operation: (inputPath, outputPath) => {
-      return runFFmpeg(['-i', inputPath, '-ss', start.toString(), '-t', duration.toString(), '-c', 'copy', outputPath], taskId);
+      return runFFmpeg(['-i', inputPath, '-ss', start.toString(), '-t', duration.toString(), '-c', 'copy', outputPath], task);
     },
   });
 }
 
-export async function extractAudio(s3Path: string, audioFormat: string, taskId: string) {
+export async function extractAudio(s3Path: string, audioFormat: string, task: Task) {
   return handleS3DownAndUp({
-    taskId,
+    task,
     s3Path,
-    outputFile: `${taskId}.${audioFormat}`,
+    outputFile: `${task.code}.${audioFormat}`,
     operation: (inputPath, outputPath) => {
-      return runFFmpeg(["-i", inputPath, "-vn", "-acodec", "copy", outputPath], taskId)
+      return runFFmpeg(["-i", inputPath, "-vn", "-acodec", "copy", outputPath], task)
     },
   });
 }
 
-export async function cutEnd(s3Path: string, duration: number, outputFormat: string, taskId: string) {
+export async function cutEnd(s3Path: string, duration: number, outputFormat: string, task: Task) {
   return handleS3DownAndUp({
-    taskId,
+    task,
     s3Path,
-    outputFile: `${taskId}.${outputFormat}`,
+    outputFile: `${task.code}.${outputFormat}`,
     operation: async (inputPath, outputPath) => {
       const totalDuration = await getVideoDuration(inputPath);
       const keepDuration = totalDuration - duration;
       if (keepDuration <= 0) throw new Error("Resulting video would be empty");
 
-      return runFFmpeg(["-i", inputPath, "-vn", "-acodec", "copy", outputPath], taskId)
+      return runFFmpeg(["-i", inputPath, "-vn", "-acodec", "copy", outputPath], task)
     },
   });
 }
@@ -62,12 +61,12 @@ async function getVideoDuration(filePath: string) {
   return parseFloat(response.text().trim());
 }
 
-export async function updateFileMetadata(fileId: string) {
+export async function updateFileMetadata(fileId: UserFile['id']) {
   const { meta, mimeType } = await getFileMetadata(fileId);
   return updateFile(fileId, { mime_type: mimeType, metadata: JSON.stringify(meta) });
 }
 
-export async function getFileMetadata(fileId: string) {
+export async function getFileMetadata(fileId: UserFile['id']) {
   const file = await getFile(fileId);
   if (!file) throw new Error(`File ${fileId} not found!`);
 
@@ -175,60 +174,75 @@ async function getAudioMetadata(inputPath: string) {
 }
 
 interface Params {
-  taskId: string;
+  task: Task;
   s3Path: string;
   outputFile: string;
   operation: (inputPath: string, outputPath: string) => Promise<void>;
 }
 async function handleS3DownAndUp(params: Params) {
-  const { taskId, s3Path, outputFile, operation } = params;
+  const { task, s3Path, outputFile, operation } = params;
   const inputPath = path.join(tempDir, s3Path);
   const outputPath = path.join(tempDir, outputFile);
-  let error;
 
-  try {
-    await downloadFromS3ToDisk(s3Path, inputPath);
-    await operation(inputPath, outputPath);
-    await uploadToS3FromDisk(outputPath, outputFile);
-
-    const task = await getTask(taskId);
-    if (!task) {
-      // noinspection ExceptionCaughtLocallyJS
-      throw new Error(`Task ${taskId} not found!`);
-    }
-
-    const file = await getFile(task.file_id);
-    if (!file) {
-      // noinspection ExceptionCaughtLocallyJS
-      throw new Error(`File ${task.file_id} not found!`);
-    }
-
-    const oldExt = path.extname(file.file_name);
-    const cleanName = path.basename(`${tempDir}/${file.file_name}`, oldExt);
-
-    const newExt = path.extname(outputFile);
-    const newName = `${cleanName}${newExt}`;
-
-    const { data, error } = await tryCatch(getLocalFileMetadata(outputPath));
-    if (error) {
-      console.error('Could not resolve metadata for: ', outputPath);
-      console.error(error);
-    }
-
-    await updateFile(task.file_id, {
-      file_name: newName,
-      file_path: outputFile,
-      ...(data ? {
-        mime_type: data.mimeType,
-        metadata: JSON.stringify(data.meta),
-      } : {})
+  const { error: downloadError } = await tryCatch(downloadFromS3ToDisk(s3Path, inputPath));
+  if (downloadError) {
+    logTask(task.id, 'Failed to download from S3');
+    after(async () => {
+      await cleanUpFile(inputPath);
+      await cleanUpFile(outputPath);
     });
-    await removeFileLock(file.id);
-  } catch (err) {
-    error = err;
+    throw downloadError;
   }
 
-  logTask(taskId, 'Finished processing');
+  const { error: operationError } = await tryCatch(operation(inputPath, outputPath));
+  if (operationError) {
+    logTask(task.id, 'Failed to execute operation');
+    after(async () => {
+      await cleanUpFile(inputPath);
+      await cleanUpFile(outputPath);
+    });
+    throw operationError;
+  }
+
+  const { error: uploadError } = await tryCatch(uploadToS3FromDisk(outputPath, outputFile));
+  if (uploadError) {
+    logTask(task.id, 'Failed to upload from S3');
+    after(async () => {
+      await cleanUpFile(inputPath);
+      await cleanUpFile(outputPath);
+    });
+    throw uploadError;
+  }
+
+  const file = await getFile(task.file_id);
+  if (!file) {
+    after(async () => {
+      await cleanUpFile(inputPath);
+      await cleanUpFile(outputPath);
+    });
+    throw new Error(`File ${task.file_id} not found!`);
+  }
+
+  const oldExt = path.extname(file.file_name);
+  const cleanName = path.basename(`${tempDir}/${file.file_name}`, oldExt);
+
+  const newExt = path.extname(outputFile);
+  const newName = `${cleanName}${newExt}`;
+
+  const { data, error } = await tryCatch(getLocalFileMetadata(outputPath));
+  if (error) {
+    console.error('Could not resolve metadata for: ', outputPath);
+    console.error(error);
+  }
+
+  await updateFile(task.file_id, {
+    file_name: newName,
+    file_path: outputFile,
+    ...(data ? {
+      mime_type: data.mimeType,
+      metadata: JSON.stringify(data.meta),
+    } : {})
+  });
 
   after(async () => {
     const s3File = spaces.file(s3Path);
@@ -236,8 +250,6 @@ async function handleS3DownAndUp(params: Params) {
     await cleanUpFile(inputPath);
     await cleanUpFile(outputPath);
   });
-
-  if (error) throw error;
 }
 
 async function cleanUpFile(path: string) {
@@ -248,30 +260,25 @@ async function cleanUpFile(path: string) {
   }
 }
 
-async function runFFmpeg(args: string[], taskId: string) {
-  const task = await getTask(taskId);
-  if (!task) throw new Error(`Task ${taskId} not found!`);
-
-  logTask(taskId, 'Running ffmpeg...');
+async function runFFmpeg(args: string[], task: Task) {
+  logTask(task.id, 'Running ffmpeg...');
 
   const proc = Bun.spawn(["ffmpeg", ...args], {
     timeout: 1000 * 60 * 15, // 15 minutes
   });
 
-  await updateTask(taskId, { status: "processing", pid: proc.pid });
+  await updateTask(task.id, { status: "processing", pid: proc.pid });
   await proc.exited;
 
   if (proc.exitCode !== 0) {
     const error = await new Response(proc.stderr).text();
-    logTask(taskId, `ffmpeg finished with exit code ${proc.exitCode} (${proc.signalCode})`);
+    logTask(task.id, `ffmpeg finished with exit code ${proc.exitCode} (${proc.signalCode})`);
     console.log('error', error);
-    await updateTask(taskId, { status: "failed", error });
+    await updateTask(task.id, { status: "failed", error });
     await markPendingTasksForFileAsUnreachable(task.file_id);
-    await removeTaskFromQueue(taskId);
     throw new Error(error);
   }
 
-  await updateTask(taskId, { status: 'completed' });
-  await removeTaskFromQueue(taskId);
-  logTask(taskId, 'ffmpeg finished with exit code 0');
+  await updateTask(task.id, { status: 'completed' });
+  logTask(task.id, 'ffmpeg finished with exit code 0');
 }

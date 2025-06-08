@@ -34,6 +34,12 @@ await restoreAllProcessingTasksToQueued();
 startFFQueue();
 startBgQueue();
 
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
 const server = serve({
   routes: {
     "/": docs,
@@ -50,18 +56,14 @@ const server = serve({
     },
 
     "/tasks": async () => {
-      const tasks = await sql`SELECT * FROM tasks ORDER BY created_at DESC`;
+      const tasks = await sql`SELECT * FROM tasks ORDER BY id`;
       return Response.json({ tasks }, { status: 200 });
     },
 
     "/upload": {
       OPTIONS: async () => {
         return new Response('OK', {
-          headers: {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization",
-          },
+          headers: CORS_HEADERS,
         });
       },
       POST: async (req) => {
@@ -143,22 +145,14 @@ const server = serve({
         if (fileTooLarge) {
           return new Response("File size exceeded limits", {
             status: 413,
-            headers: {
-              "Access-Control-Allow-Origin": "*",
-              "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-              "Access-Control-Allow-Headers": "Content-Type, Authorization",
-            },
+            headers: CORS_HEADERS,
           });
         }
 
         if (!fileUploaded) {
           return new Response("Failed to upload the file", {
             status: 400,
-            headers: {
-              "Access-Control-Allow-Origin": "*",
-              "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-              "Access-Control-Allow-Headers": "Content-Type, Authorization",
-            },
+            headers: CORS_HEADERS,
           });
         }
 
@@ -169,11 +163,7 @@ const server = serve({
 
         return Response.json({ fileId }, {
           status: 200,
-          headers: {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization",
-          },
+          headers: CORS_HEADERS,
         });
       }
     },
@@ -235,11 +225,7 @@ const server = serve({
     "/delete/:fileId": {
       OPTIONS: async () => {
         return new Response('OK', {
-          headers: {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization",
-          },
+          headers: CORS_HEADERS,
         });
       },
       DELETE: async (req) => {
@@ -259,11 +245,7 @@ const server = serve({
 
         return Response.json({ fileId }, {
           status: 200,
-          headers: {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization",
-          },
+          headers: CORS_HEADERS,
         });
       }
     },
@@ -271,11 +253,7 @@ const server = serve({
     "/transcode":  {
       OPTIONS: async () => {
         return new Response('OK', {
-          headers: {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization",
-          },
+          headers: CORS_HEADERS,
         });
       },
       POST: async (req) => {
@@ -284,11 +262,7 @@ const server = serve({
         if (!parsed.success) {
           return Response.json(parsed.error, {
             status: 400,
-            headers: {
-              "Access-Control-Allow-Origin": "*",
-              "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-              "Access-Control-Allow-Headers": "Content-Type, Authorization",
-            },
+            headers: CORS_HEADERS,
           });
         }
 
@@ -314,49 +288,33 @@ const server = serve({
     "/trim": {
       OPTIONS: async () => {
         return new Response('OK', {
-          headers: {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization",
-          },
+          headers: CORS_HEADERS,
         });
       },
       POST: async (req) => {
         const parsed = TrimSchema.safeParse(await req.json());
-  
+
         if (!parsed.success) {
-          return Response.json(parsed.error, { 
+          return Response.json(parsed.error, {
             status: 400,
-            headers: {
-              "Access-Control-Allow-Origin": "*",
-              "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-              "Access-Control-Allow-Headers": "Content-Type, Authorization",
-            },
+            headers: CORS_HEADERS,
           });
         }
-  
+
         const { fileId, start, duration, outputFormat } = parsed.data;
-  
+
         const userFile = await getFile(fileId);
         if (!userFile || !(await spaces.file(userFile.file_path).exists())) {
-          return new Response("File not found", { 
+          return new Response("File not found", {
             status: 404,
-            headers: {
-              "Access-Control-Allow-Origin": "*",
-              "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-              "Access-Control-Allow-Headers": "Content-Type, Authorization",
-            },
+            headers: CORS_HEADERS,
           });
         }
-  
+
         await createTask(fileId, 'trim', { start, duration, outputFormat });
-        return Response.json({ success: true }, { 
+        return Response.json({ success: true }, {
           status: 200,
-          headers: {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization",
-          },
+          headers: CORS_HEADERS,
         });
       }
     },
@@ -364,50 +322,34 @@ const server = serve({
     "/trim-end": {
       OPTIONS: async () => {
         return new Response('OK', {
-          headers: {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization",
-          },
+          headers: CORS_HEADERS,
         });
       },
       POST: async (req) => {
         const parsed = CutEndSchema.safeParse(await req.json());
-  
+
         if (!parsed.success) {
-          return Response.json(parsed.error, { 
+          return Response.json(parsed.error, {
             status: 400,
-            headers: {
-              "Access-Control-Allow-Origin": "*",
-              "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-              "Access-Control-Allow-Headers": "Content-Type, Authorization",
-            },
+            headers: CORS_HEADERS,
           });
         }
-  
+
         const { fileId, duration, outputFormat } = parsed.data;
-  
+
         const userFile = await getFile(fileId);
-  
+
         if (!userFile || !(await spaces.file(userFile.file_path).exists())) {
-          return new Response('File not found', { 
+          return new Response('File not found', {
             status: 400,
-            headers: {
-              "Access-Control-Allow-Origin": "*",
-              "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-              "Access-Control-Allow-Headers": "Content-Type, Authorization",
-            },
+            headers: CORS_HEADERS,
          });
         }
-  
-        await createTask(fileId, 'cut-end', { duration, outputFormat });
-        return Response.json({ success: true }, { 
+
+        await createTask(fileId, 'trim-end', { duration, outputFormat });
+        return Response.json({ success: true }, {
           status: 200,
-          headers: {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization",
-          },
+          headers: CORS_HEADERS,
         });
       }
     },
@@ -415,102 +357,68 @@ const server = serve({
     "/extract-audio": {
       OPTIONS: async () => {
         return new Response('OK', {
-          headers: {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization",
-          },
+          headers: CORS_HEADERS,
         });
       },
       POST: async (req) => {
         const parsed = ExtractAudioSchema.safeParse(await req.json());
-  
+
         if (!parsed.success) {
-          return Response.json(parsed.error, { 
+          return Response.json(parsed.error, {
             status: 400,
-            headers: {
-              "Access-Control-Allow-Origin": "*",
-              "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-              "Access-Control-Allow-Headers": "Content-Type, Authorization",
-            },
+            headers: CORS_HEADERS,
           });
         }
-  
+
         const { fileId, audioFormat } = parsed.data;
         const userFile = await getFile(fileId);
-  
+
         if (!userFile || !(await spaces.file(userFile.file_path).exists())) {
-          return new Response("File not found", { 
+          return new Response("File not found", {
             status: 404,
-            headers: {
-              "Access-Control-Allow-Origin": "*",
-              "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-              "Access-Control-Allow-Headers": "Content-Type, Authorization",
-            },
+            headers: CORS_HEADERS,
           });
         }
-  
+
         await createTask(fileId, 'extract-audio', { audioFormat });
-        return Response.json({ success: true },  { 
+        return Response.json({ success: true },  {
           status: 200,
-          headers: {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization",
-          },
+          headers: CORS_HEADERS,
         });
       }
     },
 
     "/chain": {
       OPTIONS: async () => {
-        return new Response('OK', {
-          headers: {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization",
-          },
-        });
+        return new Response('OK', { headers: CORS_HEADERS });
       },
       POST: async (req) => {
         const parsed = ChainSchema.safeParse(await req.json());
         if (!parsed.success) {
-          return Response.json(parsed.error, { 
+          return Response.json(parsed.error, {
             status: 400,
-            headers: {
-              "Access-Control-Allow-Origin": "*",
-              "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-              "Access-Control-Allow-Headers": "Content-Type, Authorization",
-            },
+            headers: CORS_HEADERS,
           });
         }
-  
+
         const { fileId, operations } = parsed.data;
         const userFile = await getFile(fileId);
         if (!userFile || !(await spaces.file(userFile.file_path).exists())) {
-          return new Response("File not found", { 
+          return new Response("File not found", {
             status: 404,
-            headers: {
-              "Access-Control-Allow-Origin": "*",
-              "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-              "Access-Control-Allow-Headers": "Content-Type, Authorization",
-            },
+            headers: CORS_HEADERS,
           });
         }
-  
+
         await bulkCreateTasks(operations.map(({ type: operation, ...args }) => ({
           fileId,
           operation,
           args,
         })))
-  
-        return Response.json({ success: true },  { 
+
+        return Response.json({ success: true },  {
           status: 200,
-          headers: {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization",
-          },
+          headers: CORS_HEADERS,
         });
       }
     },

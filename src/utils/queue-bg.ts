@@ -5,7 +5,7 @@ let shouldRun = false;
 export function startBgQueue() {
   console.log("Background Queue started.");
   shouldRun = true;
-  runBgQueueLoop();
+  void runBgQueueLoop();
 }
 
 export function stopBgQueue() {

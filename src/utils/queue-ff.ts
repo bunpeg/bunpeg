@@ -1,19 +1,19 @@
-import { getNextPendingTask, markPendingTasksForFileAsUnreachable, type Task, updateTask } from './tasks.ts';
-import { getFile } from './files.ts';
+import { getNextPendingTask, markPendingTasksForFileAsUnreachable, updateTask, type Task } from './tasks.ts';
+import { getFile, type UserFile } from './files.ts';
 import { cutEnd, extractAudio, transcode, trim } from './ffmpeg.ts';
 import type { CutEndOperation, ExtractAudioOperation, TranscodeOperation, TrimOperation } from '../schemas.ts';
 import { tryCatch } from './promises.ts';
 
 const MAX_CONCURRENT_TASKS = Number(process.env.MAX_CONCURRENT_TASKS);
 
-const activeTasks = new Set<string>();
+const activeTasks = new Set<number>();
 const lockedFiles = new Set<string>();
 let shouldRun = false;
 
 export function startFFQueue() {
   logQueueMessage(`Started Queue with max concurrency: ${MAX_CONCURRENT_TASKS}`);
   shouldRun = true;
-  runQueueLoop();
+  void runQueueLoop();
 }
 
 export function stopFFQueue() {
@@ -30,7 +30,7 @@ async function runQueueLoop() {
 }
 
 async function executePass() {
-  logQueueMessage(`executing pass | active tasks: ${lockedFiles.size} | locked files: ${lockedFiles.size}`);
+  // logQueueMessage(`executing pass | active tasks: ${lockedFiles.size} | locked files: ${lockedFiles.size}`);
   if (activeTasks.size >= MAX_CONCURRENT_TASKS) {
     logQueueMessage('queue maxed out, going to sleep...')
     return;
@@ -39,70 +39,73 @@ async function executePass() {
   // TODO: fetch multiple tasks (depending on availability of the queue) and start them all
   const task = await getNextPendingTask({ excludeFileIds: Array.from(lockedFiles) });
   if (!task) {
-    logQueueMessage('no pending task found, going to sleep...');
+    // logQueueMessage('no pending task found, going to sleep...');
     return;
   }
 
   logQueueMessage(`Picking up task: ${task.id} to ${task.operation}`);
-  const { error } = await tryCatch(updateTask(task.id, { status: 'processing' }));
-  if (error) {
+
+  const { error: taskError } = await tryCatch(updateTask(task.id, { status: 'processing' }));
+  if (taskError) {
+    console.error(taskError);
     logQueueMessage(`Failed to update task ${task.id} start processing, skipping cycle...`);
     return;
   }
 
-  // Track task
+  // Lock task & file
   activeTasks.add(task.id);
   lockedFiles.add(task.file_id);
 
-  try {
-    await runOperation(task.operation, task.args, task.file_id, task.id);
-  } catch (error) {
+  const { error: operationError } = await tryCatch(runOperation(task));
+  if (operationError) {
+    console.error(operationError);
     logQueueMessage(`Failed to process task: ${task.id}`);
-    console.error(error);
     await markPendingTasksForFileAsUnreachable(task.file_id);
-    await removeTaskFromQueue(task.id);
-    await removeFileLock(task.file_id);
   }
 
-  console.log('completed cycle, restarting...');
+  removeTaskFromQueue(task.id);
+  removeFileLock(task.file_id);
+
+  // console.log('completed cycle, restarting...');
 }
 
-export async function removeTaskFromQueue(taskId: string) {
+export function removeTaskFromQueue(taskId: Task['id']) {
   logQueueMessage(`Removing task ${taskId} from queue`);
   activeTasks.delete(taskId);
 }
 
-export async function removeFileLock(fileId: string) {
+export function removeFileLock(fileId: UserFile['id']) {
   logQueueMessage(`Removing file lock ${fileId}`);
   lockedFiles.delete(fileId);
 }
 
-async function runOperation(operation: Task['operation'], jsonArgs: string, fileId: string, taskId: string) {
-  const userFile = await getFile(fileId);
+async function runOperation(task: Task) {
+  const { file_id, args: jsonArgs } = task;
+  const userFile = await getFile(file_id);
   if (!userFile) {
     throw  new Error(`No user file found`);
   }
 
   const inputPath = userFile.file_path;
-  switch (operation) {
+  switch (task.operation) {
     case 'transcode': {
       const args = JSON.parse(jsonArgs) as TranscodeOperation;
-      await transcode(inputPath, args.format, taskId);
+      await transcode(inputPath, args.format, task);
     } break;
     case 'trim': {
       const args = JSON.parse(jsonArgs) as TrimOperation;
-      await trim(inputPath, args.start, args.duration, args.outputFormat, taskId);
+      await trim(inputPath, args.start, args.duration, args.outputFormat, task);
     }  break;
-    case 'cut-end': {
+    case 'trim-end': {
       const args = JSON.parse(jsonArgs) as CutEndOperation;
-      await cutEnd(inputPath, args.duration, args.outputFormat, taskId);
+      await cutEnd(inputPath, args.duration, args.outputFormat, task);
     } break;
     case 'extract-audio': {
       const args = JSON.parse(jsonArgs) as ExtractAudioOperation;
-      await extractAudio(inputPath, args.audioFormat, taskId);
+      await extractAudio(inputPath, args.audioFormat, task);
     } break;
     default:
-      throw new Error(`Unhandled operation: ${operation}`);
+      throw new Error(`Unhandled operation: ${task.operation}`);
   }
 }
 
