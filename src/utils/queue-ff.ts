@@ -91,11 +91,11 @@ async function runOperation(operation: Task['operation'], jsonArgs: string, file
     } break;
     case 'trim': {
       const args = JSON.parse(jsonArgs) as TrimOperation;
-      await trim(inputPath, args.start.toString(), args.duration.toString(), args.outputFormat, taskId);
+      await trim(inputPath, args.start, args.duration, args.outputFormat, taskId);
     }  break;
     case 'cut-end': {
       const args = JSON.parse(jsonArgs) as CutEndOperation;
-      await cutEnd(inputPath, args.duration.toString(), args.outputFormat, taskId);
+      await cutEnd(inputPath, args.duration, args.outputFormat, taskId);
     } break;
     case 'extract-audio': {
       const args = JSON.parse(jsonArgs) as ExtractAudioOperation;
