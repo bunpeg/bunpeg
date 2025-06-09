@@ -3,6 +3,17 @@ import { getFile, type UserFile } from './files.ts';
 import { cutEnd, extractAudio, transcode, trim, mergeMedia, addAudioTrack, removeAudio, resizeVideo, extractThumbnail } from './ffmpeg.ts';
 import type { CutEndOperation, ExtractAudioOperation, TranscodeOperation, TrimOperation, MergeMediaOperation, AddAudioTrackOperation, RemoveAudioOperation, ResizeVideoOperation, ExtractThumbnailOperation } from '../schemas.ts';
 import { tryCatch } from './promises.ts';
+import {
+  CutEndSchema,
+  ExtractAudioSchema,
+  TranscodeSchema,
+  TrimSchema,
+  MergeMediaSchema,
+  AddAudioTrackSchema,
+  RemoveAudioSchema,
+  ResizeVideoSchema,
+  ExtractThumbnailSchema,
+} from '../schemas.ts';
 
 const MAX_CONCURRENT_TASKS = Number(process.env.MAX_CONCURRENT_TASKS);
 
@@ -89,39 +100,57 @@ async function runOperation(task: Task) {
   const inputPath = userFile.file_path;
   switch (task.operation) {
     case 'transcode': {
-      const args = JSON.parse(jsonArgs) as TranscodeOperation;
+      const parsed = TranscodeSchema.safeParse(JSON.parse(jsonArgs));
+      if (!parsed.success) throw new Error(`Invalid transcode args: ${JSON.stringify(parsed.error.issues)}`);
+      const args = parsed.data;
       await transcode(inputPath, args.format, task);
     } break;
     case 'trim': {
-      const args = JSON.parse(jsonArgs) as TrimOperation;
+      const parsed = TrimSchema.safeParse(JSON.parse(jsonArgs));
+      if (!parsed.success) throw new Error(`Invalid trim args: ${JSON.stringify(parsed.error.issues)}`);
+      const args = parsed.data;
       await trim(inputPath, args.start, args.duration, args.outputFormat, task);
     }  break;
     case 'trim-end': {
-      const args = JSON.parse(jsonArgs) as CutEndOperation;
+      const parsed = CutEndSchema.safeParse(JSON.parse(jsonArgs));
+      if (!parsed.success) throw new Error(`Invalid trim-end args: ${JSON.stringify(parsed.error.issues)}`);
+      const args = parsed.data;
       await cutEnd(inputPath, args.duration, args.outputFormat, task);
     } break;
     case 'extract-audio': {
-      const args = JSON.parse(jsonArgs) as ExtractAudioOperation;
+      const parsed = ExtractAudioSchema.safeParse(JSON.parse(jsonArgs));
+      if (!parsed.success) throw new Error(`Invalid extract-audio args: ${JSON.stringify(parsed.error.issues)}`);
+      const args = parsed.data;
       await extractAudio(inputPath, args.audioFormat, task);
     } break;
     case 'merge-media': {
-      const args = JSON.parse(jsonArgs) as MergeMediaOperation;
+      const parsed = MergeMediaSchema.safeParse(JSON.parse(jsonArgs));
+      if (!parsed.success) throw new Error(`Invalid merge-media args: ${JSON.stringify(parsed.error.issues)}`);
+      const args = parsed.data;
       await mergeMedia(args.fileIds, args.outputFormat, task);
     } break;
     case 'add-audio-track': {
-      const args = JSON.parse(jsonArgs) as AddAudioTrackOperation;
+      const parsed = AddAudioTrackSchema.safeParse(JSON.parse(jsonArgs));
+      if (!parsed.success) throw new Error(`Invalid add-audio-track args: ${JSON.stringify(parsed.error.issues)}`);
+      const args = parsed.data;
       await addAudioTrack(args.videoFileId, args.audioFileId, args.outputFormat, task);
     } break;
     case 'remove-audio': {
-      const args = JSON.parse(jsonArgs) as RemoveAudioOperation;
+      const parsed = RemoveAudioSchema.safeParse(JSON.parse(jsonArgs));
+      if (!parsed.success) throw new Error(`Invalid remove-audio args: ${JSON.stringify(parsed.error.issues)}`);
+      const args = parsed.data;
       await removeAudio(args.fileId, args.outputFormat, task);
     } break;
     case 'resize-video': {
-      const args = JSON.parse(jsonArgs) as ResizeVideoOperation;
+      const parsed = ResizeVideoSchema.safeParse(JSON.parse(jsonArgs));
+      if (!parsed.success) throw new Error(`Invalid resize-video args: ${JSON.stringify(parsed.error.issues)}`);
+      const args = parsed.data;
       await resizeVideo(args.fileId, args.width, args.height, args.outputFormat, task);
     } break;
     case 'extract-thumbnail': {
-      const args = JSON.parse(jsonArgs) as ExtractThumbnailOperation;
+      const parsed = ExtractThumbnailSchema.safeParse(JSON.parse(jsonArgs));
+      if (!parsed.success) throw new Error(`Invalid extract-thumbnail args: ${JSON.stringify(parsed.error.issues)}`);
+      const args = parsed.data;
       await extractThumbnail(args.fileId, args.timestamp, args.imageFormat, task);
     } break;
     default:
