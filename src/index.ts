@@ -53,10 +53,7 @@ const CORS_HEADERS = {
 
 const server = serve({
   routes: {
-    "/": async () => {
-      const file = Bun.file(path.join(import.meta.dir, "www/docs.html"));
-      return new Response(file);
-    },
+    "/": docs,
     "/openapi.yaml": async () => {
       const file = Bun.file(path.join(import.meta.dir, "www/openapi.yaml"));
       return new Response(file, {
@@ -86,9 +83,7 @@ const server = serve({
 
     "/upload": {
       OPTIONS: async () => {
-        return new Response('OK', {
-          headers: CORS_HEADERS,
-        });
+        return new Response('OK', { headers: CORS_HEADERS });
       },
       POST: async (req) => {
         const contentType = req.headers.get("content-type") || "";
@@ -167,17 +162,11 @@ const server = serve({
         await upload;
 
         if (fileTooLarge) {
-          return new Response("File size exceeded limits", {
-            status: 413,
-            headers: CORS_HEADERS,
-          });
+          return new Response("File size exceeded limits", { status: 413, headers: CORS_HEADERS });
         }
 
         if (!fileUploaded) {
-          return new Response("Failed to upload the file", {
-            status: 400,
-            headers: CORS_HEADERS,
-          });
+          return new Response("Failed to upload the file", { status: 400, headers: CORS_HEADERS });
         }
 
         after(async () => {
@@ -185,16 +174,13 @@ const server = serve({
           await updateFileMetadata(fileId);
         })
 
-        return Response.json({ fileId }, {
-          status: 200,
-          headers: CORS_HEADERS,
-        });
+        return Response.json({ fileId }, { status: 200, headers: CORS_HEADERS });
       }
     },
 
     "/meta/:fileId": async (req) => {
       const fileId = req.params.fileId;
-      if (!fileId) throw new Error('Invalid file id');
+      if (!fileId) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
 
       const meta = await getFileMetadata(fileId);
       return Response.json(meta, { status: 200 });
@@ -218,10 +204,10 @@ const server = serve({
 
     "/output/:fileId": async (req) => {
       const fileId = req.params.fileId;
-      if (!fileId) throw new Error('Invalid file id');
+      if (!fileId) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
 
       const dbFile = await getFile(fileId);
-      if (!dbFile) throw new Error('Invalid file id');
+      if (!dbFile) return new Response('Invalid file id', { status: 400, headers: CORS_HEADERS });
 
       const file = spaces.file(dbFile.file_path, { acl: 'public-read' });
       return new Response(file);
@@ -229,11 +215,11 @@ const server = serve({
 
     "/download/:fileId": async (req) => {
       const fileId = req.params.fileId;
-      if (!fileId) throw new Error('Invalid file id');
+      if (!fileId) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
 
       const dbFile = await getFile(fileId);
       console.log('dbFile', dbFile);
-      if (!dbFile) throw new Error('Invalid file id');
+      if (!dbFile) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
 
       const file = spaces.file(dbFile.file_path, { acl: 'public-read' });
 
@@ -248,16 +234,14 @@ const server = serve({
 
     "/delete/:fileId": {
       OPTIONS: async () => {
-        return new Response('OK', {
-          headers: CORS_HEADERS,
-        });
+        return new Response('OK', { headers: CORS_HEADERS });
       },
       DELETE: async (req) => {
         const fileId = req.params.fileId;
-        if (!fileId) throw new Error('Invalid file id');
+        if (!fileId) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
 
         const dbFile = await getFile(fileId);
-        if (!dbFile) throw new Error('Invalid file id');
+        if (!dbFile) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
 
         const file = spaces.file(dbFile.file_path, { acl: 'public-read' });
         if (await file.exists()) {
@@ -267,96 +251,64 @@ const server = serve({
         await deleteAllTasksForFile(fileId);
         await deleteFile(fileId);
 
-        return Response.json({ fileId }, {
-          status: 200,
-          headers: CORS_HEADERS,
-        });
+        return Response.json({ fileId }, { status: 200, headers: CORS_HEADERS });
       }
     },
 
     "/transcode":  {
       OPTIONS: async () => {
-        return new Response('OK', {
-          headers: CORS_HEADERS,
-        });
+        return new Response('OK', { headers: CORS_HEADERS });
       },
       POST: async (req) => {
         const parsed = TranscodeSchema.safeParse(await req.json());
 
         if (!parsed.success) {
-          return Response.json(parsed.error, {
-            status: 400,
-            headers: CORS_HEADERS,
-          });
+          return Response.json(parsed.error, { status: 400, headers: CORS_HEADERS });
         }
 
         const { fileId, format } = parsed.data;
         const file = await getFile(fileId);
 
         if (!file || !(await spaces.file(file.file_path).exists())) {
-          return new Response("File not found", { status: 404 });
+          return new Response("File not found", { status: 404, headers: CORS_HEADERS });
         }
 
         await createTask(fileId, 'transcode', { format });
-        return Response.json({ success: true }, {
-          status: 200,
-          headers: {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization",
-          },
-        });
+        return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS });
       }
     },
 
     "/trim": {
       OPTIONS: async () => {
-        return new Response('OK', {
-          headers: CORS_HEADERS,
-        });
+        return new Response('OK', { headers: CORS_HEADERS });
       },
       POST: async (req) => {
         const parsed = TrimSchema.safeParse(await req.json());
 
         if (!parsed.success) {
-          return Response.json(parsed.error, {
-            status: 400,
-            headers: CORS_HEADERS,
-          });
+          return Response.json(parsed.error, { status: 400, headers: CORS_HEADERS });
         }
 
         const { fileId, start, duration, outputFormat } = parsed.data;
 
         const userFile = await getFile(fileId);
         if (!userFile || !(await spaces.file(userFile.file_path).exists())) {
-          return new Response("File not found", {
-            status: 404,
-            headers: CORS_HEADERS,
-          });
+          return new Response("File not found", { status: 404, headers: CORS_HEADERS });
         }
 
         await createTask(fileId, 'trim', { start, duration, outputFormat });
-        return Response.json({ success: true }, {
-          status: 200,
-          headers: CORS_HEADERS,
-        });
+        return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS });
       }
     },
 
     "/trim-end": {
       OPTIONS: async () => {
-        return new Response('OK', {
-          headers: CORS_HEADERS,
-        });
+        return new Response('OK', { headers: CORS_HEADERS });
       },
       POST: async (req) => {
         const parsed = CutEndSchema.safeParse(await req.json());
-
         if (!parsed.success) {
-          return Response.json(parsed.error, {
-            status: 400,
-            headers: CORS_HEADERS,
-          });
+          return Response.json(parsed.error, { status: 400, headers: CORS_HEADERS });
         }
 
         const { fileId, duration, outputFormat } = parsed.data;
@@ -364,51 +316,33 @@ const server = serve({
         const userFile = await getFile(fileId);
 
         if (!userFile || !(await spaces.file(userFile.file_path).exists())) {
-          return new Response('File not found', {
-            status: 400,
-            headers: CORS_HEADERS,
-         });
+          return new Response('File not found', { status: 400, headers: CORS_HEADERS });
         }
 
         await createTask(fileId, 'trim-end', { duration, outputFormat });
-        return Response.json({ success: true }, {
-          status: 200,
-          headers: CORS_HEADERS,
-        });
+        return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS });
       }
     },
 
     "/extract-audio": {
       OPTIONS: async () => {
-        return new Response('OK', {
-          headers: CORS_HEADERS,
-        });
+        return new Response('OK', { headers: CORS_HEADERS });
       },
       POST: async (req) => {
         const parsed = ExtractAudioSchema.safeParse(await req.json());
-
         if (!parsed.success) {
-          return Response.json(parsed.error, {
-            status: 400,
-            headers: CORS_HEADERS,
-          });
+          return Response.json(parsed.error, { status: 400, headers: CORS_HEADERS });
         }
 
         const { fileId, audioFormat } = parsed.data;
         const userFile = await getFile(fileId);
 
         if (!userFile || !(await spaces.file(userFile.file_path).exists())) {
-          return new Response("File not found", {
-            status: 404,
-            headers: CORS_HEADERS,
-          });
+          return new Response("File not found", { status: 404, headers: CORS_HEADERS });
         }
 
         await createTask(fileId, 'extract-audio', { audioFormat });
-        return Response.json({ success: true },  {
-          status: 200,
-          headers: CORS_HEADERS,
-        });
+        return Response.json({ success: true },  { status: 200, headers: CORS_HEADERS });
       }
     },
 
@@ -419,19 +353,13 @@ const server = serve({
       POST: async (req) => {
         const parsed = ChainSchema.safeParse(await req.json());
         if (!parsed.success) {
-          return Response.json(parsed.error, {
-            status: 400,
-            headers: CORS_HEADERS,
-          });
+          return Response.json(parsed.error, { status: 400, headers: CORS_HEADERS });
         }
 
         const { fileId, operations } = parsed.data;
         const userFile = await getFile(fileId);
         if (!userFile || !(await spaces.file(userFile.file_path).exists())) {
-          return new Response("File not found", {
-            status: 404,
-            headers: CORS_HEADERS,
-          });
+          return new Response("File not found", { status: 404, headers: CORS_HEADERS });
         }
 
         await bulkCreateTasks(operations.map(({ type: operation, ...args }) => ({
@@ -440,10 +368,7 @@ const server = serve({
           args,
         })))
 
-        return Response.json({ success: true },  {
-          status: 200,
-          headers: CORS_HEADERS,
-        });
+        return Response.json({ success: true },  { status: 200, headers: CORS_HEADERS });
       }
     },
 

@@ -47,14 +47,16 @@ export async function extractAudio(s3Path: string, audioFormat: string, task: Ta
       // Upload the new output file to S3
       await uploadToS3FromDisk(newOutputFile, newOutputFile);
       // Get metadata and mime type
-      const { data, error } = await tryCatch(getLocalFileMetadata(newOutputFile));
+      const { data } = await tryCatch(getLocalFileMetadata(newOutputFile));
       // Create new file entry
-      await createFile({
-        id: newFileId,
-        file_name: newOutputFile,
-        file_path: newOutputFile,
-        mime_type: data?.mimeType || 'audio/' + audioFormat,
-      });
+     if (data) {
+       await createFile({
+         id: newFileId,
+         file_name: newOutputFile,
+         file_path: newOutputFile,
+         mime_type: data.mimeType || 'audio/' + audioFormat,
+       });
+     }
       // Clean up the new output file
       await cleanUpFile(newOutputFile);
     },
@@ -74,6 +76,83 @@ export async function cutEnd(s3Path: string, duration: number, outputFormat: str
       return runFFmpeg(["-i", inputPath, "-vn", "-acodec", "copy", outputPath], task)
     },
   });
+}
+
+// Merge multiple media files (same codec)
+export async function mergeMedia(s3Paths: string[], outputFormat: string, task: Task) {
+  // Download all files to tempDir
+  const inputPaths = [];
+  for (const s3Path of s3Paths) {
+    const inputPath = path.join(tempDir, s3Path);
+    await downloadFromS3ToDisk(s3Path, inputPath);
+    inputPaths.push(inputPath);
+  }
+  // Create concat list file
+  const listFile = path.join(tempDir, `${task.code}_concat.txt`);
+  const listContent = inputPaths.map(p => `file '${p}'`).join('\n');
+  await Bun.write(listFile, listContent);
+  const outputFile = `${task.code}.${outputFormat}`;
+  const outputPath = path.join(tempDir, outputFile);
+  // Run ffmpeg concat
+  await runFFmpeg(['-f', 'concat', '-safe', '0', '-i', listFile, '-c', 'copy', outputPath], task);
+  // Upload result
+  await uploadToS3FromDisk(outputPath, outputFile);
+  // Clean up
+  for (const p of inputPaths) await cleanUpFile(p);
+  await cleanUpFile(listFile);
+  await cleanUpFile(outputPath);
+  // Update file record
+  await updateFile(task.file_id, { file_name: outputFile, file_path: outputFile });
+}
+
+// Add audio track to video
+export async function addAudioTrack(s3VideoPath: string, s3AudioPath: string, outputFormat: string, task: Task) {
+  return handleS3DownAndUp({
+    task,
+    s3Path: s3VideoPath,
+    outputFile: `${task.code}.${outputFormat}`,
+    operation: async (inputVideoPath, outputPath) => {
+      const inputAudioPath = path.join(tempDir, s3AudioPath);
+      await downloadFromS3ToDisk(s3AudioPath, inputAudioPath);
+      await runFFmpeg(['-i', inputVideoPath, '-i', inputAudioPath, '-c:v', 'copy', '-map', '0:v:0', '-map', '1:a:0', '-shortest', outputPath], task);
+      await cleanUpFile(inputAudioPath);
+    },
+  });
+}
+
+// Remove audio from video
+export async function removeAudio(s3Path: string, outputFormat: string, task: Task) {
+  return handleS3DownAndUp({
+    task,
+    s3Path,
+    outputFile: `${task.code}.${outputFormat}`,
+    operation: (inputPath, outputPath) => runFFmpeg(['-i', inputPath, '-an', outputPath], task),
+  });
+}
+
+// Resize/scale video
+export async function resizeVideo(s3Path: string, width: number, height: number, outputFormat: string, task: Task) {
+  return handleS3DownAndUp({
+    task,
+    s3Path,
+    outputFile: `${task.code}.${outputFormat}`,
+    operation: (inputPath, outputPath) => runFFmpeg(['-i', inputPath, '-vf', `scale=${width}:${height}`, outputPath], task),
+  });
+}
+
+// Extract thumbnail from video
+export async function extractThumbnail(s3Path: string, timestamp: string, imageFormat: string, task: Task) {
+  return handleS3DownAndUp({
+    task,
+    s3Path,
+    outputFile: `${task.code}.${imageFormat}`,
+    operation: (inputPath, outputPath) => runFFmpeg(['-i', inputPath, '-ss', timestamp, '-vframes', '1', outputPath], task),
+  });
+}
+
+// Streaming stub (not file-based)
+export async function streamToRtmp(/* params */) {
+  throw new Error('Streaming is not supported in this backend task model.');
 }
 
 async function getVideoDuration(filePath: string) {
@@ -301,81 +380,4 @@ async function runFFmpeg(args: string[], task: Task) {
 
   await updateTask(task.id, { status: 'completed' });
   logTask(task.id, 'ffmpeg finished with exit code 0');
-}
-
-// Merge multiple media files (same codec)
-export async function mergeMedia(s3Paths: string[], outputFormat: string, task: Task) {
-  // Download all files to tempDir
-  const inputPaths = [];
-  for (const s3Path of s3Paths) {
-    const inputPath = path.join(tempDir, s3Path);
-    await downloadFromS3ToDisk(s3Path, inputPath);
-    inputPaths.push(inputPath);
-  }
-  // Create concat list file
-  const listFile = path.join(tempDir, `${task.code}_concat.txt`);
-  const listContent = inputPaths.map(p => `file '${p}'`).join('\n');
-  await Bun.write(listFile, listContent);
-  const outputFile = `${task.code}.${outputFormat}`;
-  const outputPath = path.join(tempDir, outputFile);
-  // Run ffmpeg concat
-  await runFFmpeg(['-f', 'concat', '-safe', '0', '-i', listFile, '-c', 'copy', outputPath], task);
-  // Upload result
-  await uploadToS3FromDisk(outputPath, outputFile);
-  // Clean up
-  for (const p of inputPaths) await cleanUpFile(p);
-  await cleanUpFile(listFile);
-  await cleanUpFile(outputPath);
-  // Update file record
-  await updateFile(task.file_id, { file_name: outputFile, file_path: outputFile });
-}
-
-// Add audio track to video
-export async function addAudioTrack(s3VideoPath: string, s3AudioPath: string, outputFormat: string, task: Task) {
-  return handleS3DownAndUp({
-    task,
-    s3Path: s3VideoPath,
-    outputFile: `${task.code}.${outputFormat}`,
-    operation: async (inputVideoPath, outputPath) => {
-      const inputAudioPath = path.join(tempDir, s3AudioPath);
-      await downloadFromS3ToDisk(s3AudioPath, inputAudioPath);
-      await runFFmpeg(['-i', inputVideoPath, '-i', inputAudioPath, '-c:v', 'copy', '-map', '0:v:0', '-map', '1:a:0', '-shortest', outputPath], task);
-      await cleanUpFile(inputAudioPath);
-    },
-  });
-}
-
-// Remove audio from video
-export async function removeAudio(s3Path: string, outputFormat: string, task: Task) {
-  return handleS3DownAndUp({
-    task,
-    s3Path,
-    outputFile: `${task.code}.${outputFormat}`,
-    operation: (inputPath, outputPath) => runFFmpeg(['-i', inputPath, '-an', outputPath], task),
-  });
-}
-
-// Resize/scale video
-export async function resizeVideo(s3Path: string, width: number, height: number, outputFormat: string, task: Task) {
-  return handleS3DownAndUp({
-    task,
-    s3Path,
-    outputFile: `${task.code}.${outputFormat}`,
-    operation: (inputPath, outputPath) => runFFmpeg(['-i', inputPath, '-vf', `scale=${width}:${height}`, outputPath], task),
-  });
-}
-
-// Extract thumbnail from video
-export async function extractThumbnail(s3Path: string, timestamp: string, imageFormat: string, task: Task) {
-  return handleS3DownAndUp({
-    task,
-    s3Path,
-    outputFile: `${task.code}.${imageFormat}`,
-    operation: (inputPath, outputPath) => runFFmpeg(['-i', inputPath, '-ss', timestamp, '-vframes', '1', outputPath], task),
-  });
-}
-
-// Streaming stub (not file-based)
-export async function streamToRtmp(/* params */) {
-  throw new Error('Streaming is not supported in this backend task model.');
 }
