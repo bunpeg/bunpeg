@@ -1,7 +1,7 @@
 import { getNextPendingTask, markPendingTasksForFileAsUnreachable, updateTask, type Task } from './tasks.ts';
 import { getFile, type UserFile } from './files.ts';
-import { cutEnd, extractAudio, transcode, trim } from './ffmpeg.ts';
-import type { CutEndOperation, ExtractAudioOperation, TranscodeOperation, TrimOperation } from '../schemas.ts';
+import { cutEnd, extractAudio, transcode, trim, mergeMedia, addAudioTrack, removeAudio, resizeVideo, extractThumbnail } from './ffmpeg.ts';
+import type { CutEndOperation, ExtractAudioOperation, TranscodeOperation, TrimOperation, MergeMediaOperation, AddAudioTrackOperation, RemoveAudioOperation, ResizeVideoOperation, ExtractThumbnailOperation } from '../schemas.ts';
 import { tryCatch } from './promises.ts';
 
 const MAX_CONCURRENT_TASKS = Number(process.env.MAX_CONCURRENT_TASKS);
@@ -103,6 +103,26 @@ async function runOperation(task: Task) {
     case 'extract-audio': {
       const args = JSON.parse(jsonArgs) as ExtractAudioOperation;
       await extractAudio(inputPath, args.audioFormat, task);
+    } break;
+    case 'merge-media': {
+      const args = JSON.parse(jsonArgs) as MergeMediaOperation;
+      await mergeMedia(args.fileIds, args.outputFormat, task);
+    } break;
+    case 'add-audio-track': {
+      const args = JSON.parse(jsonArgs) as AddAudioTrackOperation;
+      await addAudioTrack(args.videoFileId, args.audioFileId, args.outputFormat, task);
+    } break;
+    case 'remove-audio': {
+      const args = JSON.parse(jsonArgs) as RemoveAudioOperation;
+      await removeAudio(args.fileId, args.outputFormat, task);
+    } break;
+    case 'resize-video': {
+      const args = JSON.parse(jsonArgs) as ResizeVideoOperation;
+      await resizeVideo(args.fileId, args.width, args.height, args.outputFormat, task);
+    } break;
+    case 'extract-thumbnail': {
+      const args = JSON.parse(jsonArgs) as ExtractThumbnailOperation;
+      await extractThumbnail(args.fileId, args.timestamp, args.imageFormat, task);
     } break;
     default:
       throw new Error(`Unhandled operation: ${task.operation}`);
