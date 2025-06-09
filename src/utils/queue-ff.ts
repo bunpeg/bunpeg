@@ -1,4 +1,4 @@
-import { getNextPendingTask, markPendingTasksForFileAsUnreachable, updateTask, type Task } from './tasks.ts';
+import { getNextPendingTask, getNextPendingTasks, markPendingTasksForFileAsUnreachable, updateTask, type Task } from './tasks.ts';
 import { getFile, type UserFile } from './files.ts';
 import { cutEnd, extractAudio, transcode, trim, mergeMedia, addAudioTrack, removeAudio, resizeVideo, extractThumbnail } from './ffmpeg.ts';
 import type { CutEndOperation, ExtractAudioOperation, TranscodeOperation, TrimOperation, MergeMediaOperation, AddAudioTrackOperation, RemoveAudioOperation, ResizeVideoOperation, ExtractThumbnailOperation } from '../schemas.ts';
@@ -41,43 +41,41 @@ async function runQueueLoop() {
 }
 
 async function executePass() {
-  // logQueueMessage(`executing pass | active tasks: ${lockedFiles.size} | locked files: ${lockedFiles.size}`);
-  if (activeTasks.size >= MAX_CONCURRENT_TASKS) {
-    logQueueMessage('queue maxed out, going to sleep...')
-    return;
+  // Start as many tasks as possible up to the concurrency limit
+  while (shouldRun && activeTasks.size < MAX_CONCURRENT_TASKS) {
+    const availableSlots = MAX_CONCURRENT_TASKS - activeTasks.size;
+    if (availableSlots <= 0) return;
+    const tasks = await getNextPendingTasks({ excludeFileIds: Array.from(lockedFiles), limit: availableSlots });
+    if (!tasks || tasks.length === 0) return;
+    for (const task of tasks) {
+      startTask(task);
+    }
   }
+}
 
-  // TODO: fetch multiple tasks (depending on availability of the queue) and start them all
-  const task = await getNextPendingTask({ excludeFileIds: Array.from(lockedFiles) });
-  if (!task) {
-    // logQueueMessage('no pending task found, going to sleep...');
-    return;
-  }
-
+async function startTask(task: Task) {
   logQueueMessage(`Picking up task: ${task.id} to ${task.operation}`);
-
   const { error: taskError } = await tryCatch(updateTask(task.id, { status: 'processing' }));
   if (taskError) {
     console.error(taskError);
     logQueueMessage(`Failed to update task ${task.id} start processing, skipping cycle...`);
     return;
   }
-
   // Lock task & file
   activeTasks.add(task.id);
   lockedFiles.add(task.file_id);
-
   const { error: operationError } = await tryCatch(runOperation(task));
   if (operationError) {
     console.error(operationError);
     logQueueMessage(`Failed to process task: ${task.id}`);
     await markPendingTasksForFileAsUnreachable(task.file_id);
   }
-
   removeTaskFromQueue(task.id);
   removeFileLock(task.file_id);
-
-  // console.log('completed cycle, restarting...');
+  // After finishing, try to fill the slot again
+  if (shouldRun) {
+    void executePass();
+  }
 }
 
 export function removeTaskFromQueue(taskId: Task['id']) {

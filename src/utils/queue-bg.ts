@@ -1,6 +1,7 @@
 const MAX_CONCURRENT_TASKS = Number(process.env.MAX_CONCURRENT_TASKS);
 const tasks: (() => Promise<void>)[] = [];
 let shouldRun = false;
+let runningTasks = 0;
 
 export function startBgQueue() {
   console.log("Background Queue started.");
@@ -11,6 +12,7 @@ export function startBgQueue() {
 export function stopBgQueue() {
   shouldRun = false;
   tasks.length = 0;
+  runningTasks = 0;
 }
 
 async function runBgQueueLoop() {
@@ -21,16 +23,19 @@ async function runBgQueueLoop() {
 }
 
 async function executePass() {
-  if (tasks.length >= MAX_CONCURRENT_TASKS || tasks.length === 0) return;
+  if (runningTasks >= MAX_CONCURRENT_TASKS || tasks.length === 0) return;
 
   const task = tasks.shift();
   if (!task) return;
 
   try {
+    runningTasks++;
     await task();
   } catch (error) {
     console.error('Failed to execute bg task');
     console.error(error);
+  } finally {
+    runningTasks--;
   }
 }
 

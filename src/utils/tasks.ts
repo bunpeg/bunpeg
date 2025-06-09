@@ -81,3 +81,14 @@ export function logTask(taskId: Task['id'], message: string) {
   console.log(message);
   console.log('----------END---------');
 }
+
+export async function getNextPendingTasks(params: { excludeFileIds: string[], limit: number }) {
+  const fileIdsFilter = params.excludeFileIds.length > 0 ? sql`AND file_id NOT IN ${sql(params.excludeFileIds)}` : sql``;
+  const query = await sql`
+    SELECT *
+    FROM tasks
+    WHERE status = 'queued' ${fileIdsFilter}
+    ORDER BY id
+    LIMIT ${params.limit}`;
+  return query as Task[];
+}
