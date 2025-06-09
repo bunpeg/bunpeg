@@ -25,3 +25,9 @@ export async function updateFile(fileId: UserFile['id'], file: Partial<Omit<User
 export async  function deleteFile(fileId: UserFile['id']) {
   await sql`DELETE FROM files WHERE id = ${fileId}`;
 }
+
+export async function checkFilesExist(fileIds: string[]): Promise<boolean> {
+  if (fileIds.length === 0) return false;
+  const rows = await sql`SELECT id FROM files WHERE id IN ${sql(fileIds)}`;
+  return rows.length === fileIds.length;
+}

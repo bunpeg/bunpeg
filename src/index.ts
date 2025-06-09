@@ -16,8 +16,19 @@ import {
   restoreAllProcessingTasksToQueued,
   type Task,
 } from './utils/tasks.ts';
-import { createFile, deleteFile, getFile } from './utils/files.ts';
-import { ChainSchema, CutEndSchema, ExtractAudioSchema, TranscodeSchema, TrimSchema } from './schemas.ts';
+import { createFile, deleteFile, getFile, checkFilesExist } from './utils/files.ts';
+import {
+  ChainSchema,
+  CutEndSchema,
+  ExtractAudioSchema,
+  TranscodeSchema,
+  TrimSchema,
+  MergeMediaSchema,
+  AddAudioTrackSchema,
+  RemoveAudioSchema,
+  ResizeVideoSchema,
+  ExtractThumbnailSchema,
+} from './schemas.ts';
 import { startFFQueue } from './utils/queue-ff.ts';
 import { after, startBgQueue } from './utils/queue-bg.ts';
 import { spaces } from './utils/s3.ts';
@@ -433,6 +444,88 @@ const server = serve({
           status: 200,
           headers: CORS_HEADERS,
         });
+      }
+    },
+
+    "/merge-media": {
+      OPTIONS: async () => new Response('OK', { headers: CORS_HEADERS }),
+      POST: async (req) => {
+        const parsed = MergeMediaSchema.safeParse(await req.json());
+        if (!parsed.success) {
+          return Response.json(parsed.error, { status: 400, headers: CORS_HEADERS });
+        }
+        const { fileIds, outputFormat } = parsed.data;
+        // Check all files exist in one query
+        if (!(await checkFilesExist(fileIds))) {
+          return new Response(`One or more files not found`, { status: 404, headers: CORS_HEADERS });
+        }
+        await createTask(fileIds[0]!, 'merge-media', { fileIds, outputFormat });
+        return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS });
+      }
+    },
+
+    "/add-audio-track": {
+      OPTIONS: async () => new Response('OK', { headers: CORS_HEADERS }),
+      POST: async (req) => {
+        const parsed = AddAudioTrackSchema.safeParse(await req.json());
+        if (!parsed.success) {
+          return Response.json(parsed.error, { status: 400, headers: CORS_HEADERS });
+        }
+        const { videoFileId, audioFileId, outputFormat } = parsed.data;
+        // Check both files exist in one query
+        if (!(await checkFilesExist([videoFileId, audioFileId]))) {
+          return new Response("Video or audio file not found", { status: 404, headers: CORS_HEADERS });
+        }
+        await createTask(videoFileId, 'add-audio-track', { videoFileId, audioFileId, outputFormat });
+        return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS });
+      }
+    },
+
+    "/remove-audio": {
+      OPTIONS: async () => new Response('OK', { headers: CORS_HEADERS }),
+      POST: async (req) => {
+        const parsed = RemoveAudioSchema.safeParse(await req.json());
+        if (!parsed.success) {
+          return Response.json(parsed.error, { status: 400, headers: CORS_HEADERS });
+        }
+        const { fileId, outputFormat } = parsed.data;
+        if (!(await checkFilesExist([fileId]))) {
+          return new Response("File not found", { status: 404, headers: CORS_HEADERS });
+        }
+        await createTask(fileId, 'remove-audio', { fileId, outputFormat });
+        return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS });
+      }
+    },
+
+    "/resize-video": {
+      OPTIONS: async () => new Response('OK', { headers: CORS_HEADERS }),
+      POST: async (req) => {
+        const parsed = ResizeVideoSchema.safeParse(await req.json());
+        if (!parsed.success) {
+          return Response.json(parsed.error, { status: 400, headers: CORS_HEADERS });
+        }
+        const { fileId, width, height, outputFormat } = parsed.data;
+        if (!(await checkFilesExist([fileId]))) {
+          return new Response("File not found", { status: 404, headers: CORS_HEADERS });
+        }
+        await createTask(fileId, 'resize-video', { fileId, width, height, outputFormat });
+        return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS });
+      }
+    },
+
+    "/extract-thumbnail": {
+      OPTIONS: async () => new Response('OK', { headers: CORS_HEADERS }),
+      POST: async (req) => {
+        const parsed = ExtractThumbnailSchema.safeParse(await req.json());
+        if (!parsed.success) {
+          return Response.json(parsed.error, { status: 400, headers: CORS_HEADERS });
+        }
+        const { fileId, timestamp, imageFormat } = parsed.data;
+        if (!(await checkFilesExist([fileId]))) {
+          return new Response("File not found", { status: 404, headers: CORS_HEADERS });
+        }
+        await createTask(fileId, 'extract-thumbnail', { fileId, timestamp, imageFormat });
+        return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS });
       }
     },
   },
