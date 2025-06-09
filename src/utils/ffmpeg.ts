@@ -1,10 +1,11 @@
 import { $ } from 'bun';
 import path from 'path';
 import { logTask, markPendingTasksForFileAsUnreachable, type Task, updateTask } from './tasks';
-import { getFile, updateFile, type UserFile } from './files';
+import { getFile, updateFile, type UserFile, createFile } from './files';
 import { downloadFromS3ToDisk, spaces, uploadToS3FromDisk } from './s3.ts';
 import { tryCatch } from './promises.ts';
 import { after } from './queue-bg.ts';
+import { nanoid } from 'nanoid';
 
 const tempDir = "./data/temp";
 
@@ -31,12 +32,31 @@ export async function trim(s3Path: string, start: number, duration: number, outp
 }
 
 export async function extractAudio(s3Path: string, audioFormat: string, task: Task) {
+  // Generate new file id and name
+  const newFileId = nanoid(8);
+  const outputFile = `${task.code}.${audioFormat}`;
+  const newOutputFile = `${newFileId}.${audioFormat}`;
   return handleS3DownAndUp({
     task,
     s3Path,
-    outputFile: `${task.code}.${audioFormat}`,
-    operation: (inputPath, outputPath) => {
-      return runFFmpeg(["-i", inputPath, "-vn", "-acodec", "copy", outputPath], task)
+    outputFile,
+    operation: async (inputPath, outputPath) => {
+      await runFFmpeg(["-i", inputPath, "-vn", "-acodec", "copy", outputPath], task);
+      // Copy output file to newOutputFile
+      await Bun.write(newOutputFile, await Bun.file(outputPath).arrayBuffer());
+      // Upload the new output file to S3
+      await uploadToS3FromDisk(newOutputFile, newOutputFile);
+      // Get metadata and mime type
+      const { data, error } = await tryCatch(getLocalFileMetadata(newOutputFile));
+      // Create new file entry
+      await createFile({
+        id: newFileId,
+        file_name: newOutputFile,
+        file_path: newOutputFile,
+        mime_type: data?.mimeType || 'audio/' + audioFormat,
+      });
+      // Clean up the new output file
+      await cleanUpFile(newOutputFile);
     },
   });
 }
