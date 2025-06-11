@@ -14,13 +14,19 @@ export interface Task {
   error?: string;
 }
 
-export async function getTask(taskId: Task['id']) {
-  const query = await sql`SELECT * FROM tasks WHERE id = ${taskId}`;
-  return query[0] as Task | undefined;
-}
-
 export async function getTasksForFile(fileId: UserFile['id']) {
   return (await sql`SELECT * FROM tasks WHERE file_id = ${fileId} ORDER BY id`) as Task[];
+}
+
+export async function getNextPendingTasks(params: { excludeFileIds: string[], limit: number }) {
+  const fileIdsFilter = params.excludeFileIds.length > 0 ? sql`AND file_id NOT IN ${sql(params.excludeFileIds)}` : sql``;
+  const query = await sql`
+    SELECT *
+    FROM tasks
+    WHERE status = 'queued' ${fileIdsFilter}
+    ORDER BY id
+    LIMIT ${params.limit}`;
+  return query as Task[];
 }
 
 export async function createTask(fileId: UserFile['id'], operation: Task['operation'], args: Operations) {
@@ -49,10 +55,6 @@ export async function updateTask(taskId: Task['id'], task: Partial<Omit<Task, 'i
   await sql`UPDATE tasks SET ${sql(task)} WHERE id = ${taskId}`;
 }
 
-export async function updateTaskStatus(taskId: Task['id'], status: Task['status']) {
-  await sql`UPDATE tasks SET status = ${status} WHERE id = ${taskId}`;
-}
-
 export async function markPendingTasksForFileAsUnreachable(fileId: Task['file_id']) {
   await sql`UPDATE tasks SET status = 'unreachable' WHERE file_id = ${fileId} and status = 'queued'`;
 }
@@ -69,15 +71,4 @@ export function logTask(taskId: Task['id'], message: string) {
   console.log(`------- Task: ${taskId} ------------`);
   console.log(message);
   console.log('----------END---------');
-}
-
-export async function getNextPendingTasks(params: { excludeFileIds: string[], limit: number }) {
-  const fileIdsFilter = params.excludeFileIds.length > 0 ? sql`AND file_id NOT IN ${sql(params.excludeFileIds)}` : sql``;
-  const query = await sql`
-    SELECT *
-    FROM tasks
-    WHERE status = 'queued' ${fileIdsFilter}
-    ORDER BY id
-    LIMIT ${params.limit}`;
-  return query as Task[];
 }

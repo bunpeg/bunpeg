@@ -36,9 +36,9 @@ import { getFileMetadata, updateFileMetadata } from './utils/ffmpeg.ts';
 
 const MAX_FILE_SIZE_UPLOAD = Number(process.env.MAX_FILE_SIZE_UPLOAD);
 
-const tempDir = "./data/temp";
-await rm(tempDir, { force: true, recursive: true });
-fs.mkdirSync(tempDir, { recursive: true });
+export const TEMP_DIR = "./data/temp";
+await rm(TEMP_DIR, { force: true, recursive: true });
+fs.mkdirSync(TEMP_DIR, { recursive: true });
 
 await restoreAllProcessingTasksToQueued();
 
