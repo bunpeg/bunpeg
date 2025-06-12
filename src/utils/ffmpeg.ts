@@ -90,6 +90,7 @@ export async function removeAudio(s3Path: string, outputFormat: string, task: Ta
 
 export async function addAudioTrack(s3VideoPath: string, s3AudioPath: string, outputFormat: string, task: Task) {
   const inputAudioPath = path.join(TEMP_DIR, s3AudioPath);
+
   const { error: downloadError } = await tryCatch(downloadFromS3ToDisk(s3AudioPath, inputAudioPath));
   if (downloadError) {
     logTask(task.id, 'Failed to download the audio track to add');
