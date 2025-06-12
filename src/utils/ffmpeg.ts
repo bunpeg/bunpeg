@@ -171,10 +171,12 @@ export async function mergeMedia(s3Paths: string[], outputFormat: string, task: 
 }
 
 export async function extractThumbnail(s3Path: string, timestamp: string, imageFormat: string, task: Task) {
-  return handleS3DownAndUpSwap({
+  const newFileId = nanoid(8);
+  const outputFile = `${newFileId}.${imageFormat}`;
+  return handleS3DownAndUpAppend({
     task,
     s3Path,
-    outputFile: `${task.code}.${imageFormat}`,
+    outputFile,
     operation: (inputPath, outputPath) => {
       return runFFmpeg(['-i', inputPath, '-ss', timestamp, '-vframes', '1', outputPath], task);
     },
