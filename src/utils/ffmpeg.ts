@@ -26,27 +26,27 @@ export async function transcode(s3Path: string, outputFormat: string, task: Task
   });
 }
 
+export async function resizeVideo(s3Path: string, width: number, height: number, outputFormat: string, task: Task) {
+  return handleS3DownAndUpSwap({
+    task,
+    s3Path,
+    outputFile: `${task.code}.${outputFormat}`,
+    operation: (inputPath, outputPath) => {
+      return runFFmpeg(['-i', inputPath, '-vf', `scale=${width}:${height}`, outputPath], task);
+    },
+  });
+}
+
 export async function trim(s3Path: string, start: number, duration: number, outputFormat: string, task: Task) {
   return handleS3DownAndUpSwap({
     task,
     s3Path,
     outputFile: `${task.code}.${outputFormat}`,
     operation: (inputPath, outputPath) => {
-      return runFFmpeg(['-i', inputPath, '-ss', start.toString(), '-t', duration.toString(), '-c', 'copy', outputPath], task);
-    },
-  });
-}
-
-export async function extractAudio(s3Path: string, audioFormat: string, task: Task) {
-  // Generate new file id and name
-  const newFileId = nanoid(8);
-  const outputFile = `${newFileId}.${audioFormat}`;
-  return handleS3DownAndUpAppend({
-    task,
-    s3Path,
-    outputFile,
-    operation: (inputPath, outputPath) => {
-      return runFFmpeg(["-i", inputPath, "-vn", "-acodec", "copy", outputPath], task);
+      return runFFmpeg(
+        ['-i', inputPath, '-ss', start.toString(), '-t', duration.toString(), '-c', 'copy', outputPath],
+        task,
+      );
     },
   });
 }
@@ -61,12 +61,57 @@ export async function cutEnd(s3Path: string, duration: number, outputFormat: str
       const keepDuration = totalDuration - duration;
       if (keepDuration <= 0) throw new Error("Resulting video would be empty");
 
-      return runFFmpeg(["-i", inputPath, "-vn", "-acodec", "copy", outputPath], task)
+      void runFFmpeg(["-i", inputPath, "-t", keepDuration.toFixed(2), "-c", "copy", outputPath], task);
     },
   });
 }
 
-// Merge multiple media files (same codec)
+export async function extractAudio(s3Path: string, audioFormat: string, task: Task) {
+  const newFileId = nanoid(8);
+  const outputFile = `${newFileId}.${audioFormat}`;
+  return handleS3DownAndUpAppend({
+    task,
+    s3Path,
+    outputFile,
+    operation: (inputPath, outputPath) => {
+      return runFFmpeg(["-i", inputPath, "-vn", "-acodec", "copy", outputPath], task);
+    },
+  });
+}
+
+export async function removeAudio(s3Path: string, outputFormat: string, task: Task) {
+  return handleS3DownAndUpSwap({
+    task,
+    s3Path,
+    outputFile: `${task.code}.${outputFormat}`,
+    operation: (inputPath, outputPath) => runFFmpeg(['-i', inputPath, '-an', outputPath], task),
+  });
+}
+
+export async function addAudioTrack(s3VideoPath: string, s3AudioPath: string, outputFormat: string, task: Task) {
+  const inputAudioPath = path.join(TEMP_DIR, s3AudioPath);
+  const { error: downloadError } = await tryCatch(downloadFromS3ToDisk(s3AudioPath, inputAudioPath));
+  if (downloadError) {
+    logTask(task.id, 'Failed to download the audio track to add');
+    await cleanUpFile(inputAudioPath);
+    throw downloadError;
+  }
+
+  const { error } = await tryCatch(
+    handleS3DownAndUpSwap({
+      task,
+      s3Path: s3VideoPath,
+      outputFile: `${task.code}.${outputFormat}`,
+      operation: async (inputVideoPath, outputPath) => {
+        await runFFmpeg(['-i', inputVideoPath, '-i', inputAudioPath, '-c:v', 'copy', '-map', '0:v:0', '-map', '1:a:0', '-shortest', outputPath], task);
+      },
+    })
+  );
+  await cleanUpFile(inputAudioPath);
+
+  if (error) throw error;
+}
+
 export async function mergeMedia(s3Paths: string[], outputFormat: string, task: Task) {
   // Download all files to TEMP_DIR
   const inputPaths: string[] = [];
@@ -91,8 +136,10 @@ export async function mergeMedia(s3Paths: string[], outputFormat: string, task: 
   await Bun.write(listFile, listContent);
   const outputFile = `${task.code}.${outputFormat}`;
   const outputPath = path.join(TEMP_DIR, outputFile);
-  // Run ffmpeg concat
-  const { error: operationError } = await tryCatch(runFFmpeg(['-f', 'concat', '-safe', '0', '-i', listFile, '-c', 'copy', outputPath], task));
+
+  const { error: operationError } = await tryCatch(
+    runFFmpeg(['-f', 'concat', '-safe', '0', '-i', listFile, '-c', 'copy', outputPath], task)
+  );
   if (operationError) {
     logTask(task.id, 'Failed to execute operation');
     after(async () => {
@@ -103,7 +150,7 @@ export async function mergeMedia(s3Paths: string[], outputFormat: string, task: 
     });
     throw operationError;
   }
-  // Upload result
+
   const { error: uploadError } = await tryCatch(uploadToS3FromDisk(outputPath, outputFile));
   if (uploadError) {
     after(async () => {
@@ -114,7 +161,7 @@ export async function mergeMedia(s3Paths: string[], outputFormat: string, task: 
     });
     throw uploadError;
   }
-  // Clean up
+
   for (const p of inputPaths) await cleanUpFile(p);
   await cleanUpFile(listFile);
   await cleanUpFile(outputPath);
@@ -122,48 +169,14 @@ export async function mergeMedia(s3Paths: string[], outputFormat: string, task: 
   await updateFile(task.file_id, { file_name: outputFile, file_path: outputFile });
 }
 
-// Add audio track to video
-export async function addAudioTrack(s3VideoPath: string, s3AudioPath: string, outputFormat: string, task: Task) {
-  return handleS3DownAndUpSwap({
-    task,
-    s3Path: s3VideoPath,
-    outputFile: `${task.code}.${outputFormat}`,
-    operation: async (inputVideoPath, outputPath) => {
-      const inputAudioPath = path.join(TEMP_DIR, s3AudioPath);
-      await downloadFromS3ToDisk(s3AudioPath, inputAudioPath);
-      await runFFmpeg(['-i', inputVideoPath, '-i', inputAudioPath, '-c:v', 'copy', '-map', '0:v:0', '-map', '1:a:0', '-shortest', outputPath], task);
-      await cleanUpFile(inputAudioPath);
-    },
-  });
-}
-
-// Remove audio from video
-export async function removeAudio(s3Path: string, outputFormat: string, task: Task) {
-  return handleS3DownAndUpSwap({
-    task,
-    s3Path,
-    outputFile: `${task.code}.${outputFormat}`,
-    operation: (inputPath, outputPath) => runFFmpeg(['-i', inputPath, '-an', outputPath], task),
-  });
-}
-
-// Resize/scale video
-export async function resizeVideo(s3Path: string, width: number, height: number, outputFormat: string, task: Task) {
-  return handleS3DownAndUpSwap({
-    task,
-    s3Path,
-    outputFile: `${task.code}.${outputFormat}`,
-    operation: (inputPath, outputPath) => runFFmpeg(['-i', inputPath, '-vf', `scale=${width}:${height}`, outputPath], task),
-  });
-}
-
-// Extract thumbnail from video
 export async function extractThumbnail(s3Path: string, timestamp: string, imageFormat: string, task: Task) {
   return handleS3DownAndUpSwap({
     task,
     s3Path,
     outputFile: `${task.code}.${imageFormat}`,
-    operation: (inputPath, outputPath) => runFFmpeg(['-i', inputPath, '-ss', timestamp, '-vframes', '1', outputPath], task),
+    operation: (inputPath, outputPath) => {
+      return runFFmpeg(['-i', inputPath, '-ss', timestamp, '-vframes', '1', outputPath], task);
+    },
   });
 }
 
