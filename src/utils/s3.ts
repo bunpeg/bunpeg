@@ -81,7 +81,6 @@ export async function handleS3DownAndUpAppend(params: Params) {
   await __executeS3DownAndUp(
     params,
     async () => {
-      console.log('handleS3DownAndUpAppend - cleanup');
       const { task, s3Path, outputFile } = params;
       const inputPath = path.join(TEMP_DIR, s3Path);
       const outputPath = path.join(TEMP_DIR, outputFile);
@@ -89,7 +88,6 @@ export async function handleS3DownAndUpAppend(params: Params) {
       const newFileId = extractFileName(outputFile);
       const newAudioFile = Bun.file(outputFile);
       const { data: newFileName } = await tryCatch(resolveNewFileName(task.file_id, outputFile));
-      console.log('newFileName: ', newFileName);
 
       await createFile({
         id: newFileId,
@@ -100,11 +98,7 @@ export async function handleS3DownAndUpAppend(params: Params) {
 
       const { data: metadata, error } = await tryCatch(getLocalFileMetadata(outputPath));
       if (metadata) {
-        console.log('metadata', metadata);
         await updateFile(newFileId, { metadata: JSON.stringify(metadata.meta) });
-      } else {
-        console.log('failed to extract metadata from', outputFile);
-        console.error(error);
       }
 
       after(async () => {
