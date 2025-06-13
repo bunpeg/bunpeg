@@ -14,6 +14,7 @@ import {
 } from './s3.ts';
 import { tryCatch } from './promises.ts';
 import { after } from './queue-bg.ts';
+import type { ExtractAudioType } from '../schemas.ts';
 
 export async function transcode(s3Path: string, outputFormat: string, task: Task) {
   return handleS3DownAndUpSwap({
@@ -66,7 +67,7 @@ export async function cutEnd(s3Path: string, duration: number, outputFormat: str
   });
 }
 
-export async function extractAudio(s3Path: string, audioFormat: string, task: Task) {
+export async function extractAudio(s3Path: string, audioFormat: ExtractAudioType['audioFormat'], task: Task) {
   const newFileId = nanoid(8);
   const outputFile = `${newFileId}.${audioFormat}`;
   return handleS3DownAndUpAppend({
@@ -74,7 +75,7 @@ export async function extractAudio(s3Path: string, audioFormat: string, task: Ta
     s3Path,
     outputFile,
     operation: (inputPath, outputPath) => {
-      return runFFmpeg(["-i", inputPath, "-vn", "-acodec", "copy", outputPath], task);
+      return runFFmpeg(["-i", inputPath, "-vn", ...getAudioEncodingParams(audioFormat), outputPath], task);
     },
   });
 }
@@ -183,11 +184,6 @@ export async function extractThumbnail(s3Path: string, timestamp: string, imageF
   });
 }
 
-async function getVideoDuration(filePath: string) {
-  const response = await $`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${filePath}"`;
-  return parseFloat(response.text().trim());
-}
-
 export async function updateFileMetadata(fileId: UserFile['id']) {
   const { meta, mimeType } = await getFileMetadata(fileId);
   return updateFile(fileId, { mime_type: mimeType, metadata: JSON.stringify(meta) });
@@ -236,6 +232,11 @@ export async function getLocalFileMetadata(filePath: string) {
   throw new Error(`File on ${filePath} has unknown type: ${mimeType}`);
 }
 
+async function getVideoDuration(filePath: string) {
+  const response = await $`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${filePath}"`;
+  return parseFloat(response.text().trim());
+}
+
 async function getVideoMetadata(inputPath: string) {
   const proc = Bun.spawn([
     "ffprobe",
@@ -259,9 +260,9 @@ async function getVideoMetadata(inputPath: string) {
   const format = result.format;
 
   return {
-    fileSize: format?.size ? parseInt(format.size, 10) : null,
+    size: format?.size ? parseInt(format.size, 10) : null,
     duration: format?.duration ? parseFloat(format.duration) : null,
-    bitrate: format?.bit_rate ? parseInt(format.bit_rate, 10) : null,
+    bit_rate: format?.bit_rate ? parseInt(format.bit_rate, 10) : null,
     resolution: {
       width: stream?.width ?? null,
       height: stream?.height ?? null,
@@ -292,16 +293,34 @@ async function getAudioMetadata(inputPath: string) {
   const format = result.format;
 
   return {
-    fileSize: format?.size ? parseInt(format.size, 10) : null,
+    size: format?.size ? parseInt(format.size, 10) : null,
     duration: format?.duration ? parseFloat(format.duration) : null,
-    bitrate: format?.bit_rate ? parseInt(format.bit_rate, 10) : null,
-    sampleRate: stream?.sample_rate ? parseInt(stream.sample_rate, 10) : null,
+    bit_rate: format?.bit_rate ? parseInt(format.bit_rate, 10) : null,
+    sample_rate: stream?.sample_rate ? parseInt(stream.sample_rate, 10) : null,
     channels: stream?.channels ?? null,
   };
 }
 
+export function getAudioEncodingParams(format: ExtractAudioType['audioFormat']): string[] {
+  switch (format.toLowerCase()) {
+    case "mp3":
+      return ["-acodec", "libmp3lame", "-q:a", "2"]; // Good quality
+    case "aac":
+    case "m4a":
+      return ["-acodec", "aac", "-b:a", "192k"]; // Bitrate encoding
+    case "wav":
+      return ["-acodec", "pcm_s16le"]; // Raw WAV audio
+    case "flac":
+      return ["-acodec", "flac"];
+    case "opus":
+      return ["-acodec", "libopus", "-b:a", "128k"];
+    default:
+      throw new Error(`Unsupported audio format: ${format}`);
+  }
+}
+
 async function runFFmpeg(args: string[], task: Task) {
-  logTask(task.id, 'Running ffmpeg...');
+  logOperation( JSON.stringify(["ffmpeg", ...args]));
 
   const proc = Bun.spawn(["ffmpeg", ...args], {
     timeout: 1000 * 60 * 15, // 15 minutes
@@ -321,4 +340,10 @@ async function runFFmpeg(args: string[], task: Task) {
 
   await updateTask(task.id, { status: 'completed' });
   logTask(task.id, 'ffmpeg finished with exit code 0');
+}
+
+export function logOperation( message: string) {
+  console.log(`------- FFmpeg: ------------`);
+  console.log(message);
+  console.log(' ');
 }

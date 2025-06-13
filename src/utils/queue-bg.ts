@@ -1,3 +1,5 @@
+import { tryCatch } from './promises.ts';
+
 const MAX_CONCURRENT_TASKS = Number(process.env.MAX_CONCURRENT_TASKS);
 const tasks: (() => Promise<void>)[] = [];
 let shouldRun = false;
@@ -17,7 +19,7 @@ export function stopBgQueue() {
 
 async function runBgQueueLoop() {
   while (shouldRun) {
-    await executePass();
+    await tryCatch(executePass());
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
 }

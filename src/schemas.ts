@@ -2,63 +2,80 @@ import { z } from "zod";
 
 // Shared param-only schemas for chaining (no 'fileId', no 'type')
 
-const TrimParams = z.object({
+export const TrimParams = z.object({
   start: z.number({ required_error: "Start time is required" }),
   duration: z.number({ required_error: "Duration is required" }),
   outputFormat: z.string().min(1, "Output format is required"),
 });
 
-const CutEndParams = z.object({
-  duration: z.number({ required_error: "Duration is required" }),
-  outputFormat: z.string().min(1, "Output format is required"),
-});
-
-const ExtractAudioParams = z.object({
-  audioFormat: z.string(),
-});
-
-const TranscodeParams = z.object({
-  format: z.string().min(1, "Format is required"),
-});
-
-// Individual operation schemas (for single-operation endpoints), includes fileId
-
 export const TrimSchema = TrimParams.extend({
   fileId: z.string().min(1, "fileId is required"),
+});
+
+export const TrimSchemaWithType = TrimParams.extend({
+  type: z.literal("trim"),
+});
+
+export type TrimType = z.infer<typeof TrimParams>;
+
+export const CutEndParams = z.object({
+  duration: z.number({ required_error: "Duration is required" }),
+  outputFormat: z.string().min(1, "Output format is required"),
 });
 
 export const CutEndSchema = CutEndParams.extend({
   fileId: z.string().min(1, "fileId is required"),
 });
 
-export const ExtractAudioSchema = ExtractAudioParams.extend({
-  fileId: z.string().min(1, "fileId is required"),
-});
-
-
-export const TranscodeSchema = TranscodeParams.extend({
-  fileId: z.string().min(1, "fileId is required"),
-});
-
-// Chained operation variant schemas (for /chain endpoint), includes type and no fileId
-
-export const TrimSchemaWithType = TrimParams.extend({
-  type: z.literal("trim"),
-});
-
 export const CutEndSchemaWithType = CutEndParams.extend({
   type: z.literal("trim-end"),
+});
+
+export type CutEndType = z.infer<typeof CutEndParams>;
+
+export const ExtractAudioParams = z.object({
+  audioFormat: z.enum(['mp3', 'aac', 'm4a', 'wav', 'flac', 'opus']),
+});
+
+export const ExtractAudioSchema = ExtractAudioParams.extend({
+  fileId: z.string().min(1, "fileId is required"),
 });
 
 export const ExtractAudioSchemaWithType = ExtractAudioParams.extend({
   type: z.literal("extract-audio"),
 });
 
+export type ExtractAudioType = z.infer<typeof ExtractAudioParams>;
+
+export const TranscodeParams = z.object({
+  format: z.string().min(1, "Format is required"),
+});
+
+export const TranscodeSchema = TranscodeParams.extend({
+  fileId: z.string().min(1, "fileId is required"),
+});
+
 export const TranscodeSchemaWithType = TranscodeParams.extend({
   type: z.literal("transcode"),
 });
 
-// Merge media
+export type TranscodeType = z.infer<typeof TranscodeParams>;
+
+export const RemoveAudioParams = z.object({
+  outputFormat: z.string().min(1, 'Output format is required'),
+})
+
+// Remove audio
+export const RemoveAudioSchema = RemoveAudioParams.extend({
+  fileId: z.string().min(1, 'fileId is required'),
+});
+
+export const RemoveAudioSchemaWithType = RemoveAudioParams.extend({
+  type: z.literal('remove-audio'),
+});
+
+export type RemoveAudioType = z.infer<typeof RemoveAudioParams>;
+
 export const MergeMediaSchema = z.object({
   fileIds: z.array(
     z.string().min(1, 'fileId is required')
@@ -69,6 +86,8 @@ export const MergeMediaSchema = z.object({
 export const MergeMediaSchemaWithType = MergeMediaSchema.extend({
   type: z.literal('merge-media'),
 });
+
+export type MergeMediaType = z.infer<typeof MergeMediaSchema>;
 
 // Add audio track
 export const AddAudioTrackSchema = z.object({
@@ -81,38 +100,38 @@ export const AddAudioTrackSchemaWithType = AddAudioTrackSchema.extend({
   type: z.literal('add-audio-track'),
 });
 
-// Remove audio
-export const RemoveAudioSchema = z.object({
-  fileId: z.string().min(1, 'fileId is required'),
-  outputFormat: z.string().min(1, 'Output format is required'),
-});
+export type AddAudioTrackType = z.infer<typeof AddAudioTrackSchema>;
 
-export const RemoveAudioSchemaWithType = RemoveAudioSchema.extend({
-  type: z.literal('remove-audio'),
-});
-
-// Resize video
-export const ResizeVideoSchema = z.object({
-  fileId: z.string().min(1, 'fileId is required'),
+export const ResizeVideoParams = z.object({
   width: z.number().int().min(1, 'Width required'),
   height: z.number().int().min(1, 'Height required'),
   outputFormat: z.string().min(1, 'Output format is required'),
 });
 
-export const ResizeVideoSchemaWithType = ResizeVideoSchema.extend({
+export const ResizeVideoSchema = ResizeVideoParams.extend({
+  fileId: z.string().min(1, 'fileId is required'),
+});
+
+export const ResizeVideoSchemaWithType = ResizeVideoParams.extend({
   type: z.literal('resize-video'),
 });
 
-// Extract thumbnail
-export const ExtractThumbnailSchema = z.object({
-  fileId: z.string().min(1, 'fileId is required'),
+export type ResizeVideoType = z.infer<typeof ResizeVideoParams>;
+
+export const ExtractThumbnailParams = z.object({
   timestamp: z.string().min(1, 'Timestamp required'),
   imageFormat: z.string().min(1, 'Image format required'),
+})
+
+export const ExtractThumbnailSchema = ExtractThumbnailParams.extend({
+  fileId: z.string().min(1, 'fileId is required'),
 });
 
-export const ExtractThumbnailSchemaWithType = ExtractThumbnailSchema.extend({
+export const ExtractThumbnailSchemaWithType = ExtractThumbnailParams.extend({
   type: z.literal('extract-thumbnail'),
 });
+
+export type ExtractThumbnailType = z.infer<typeof ExtractThumbnailParams>;
 
 // Union for chained operations
 
@@ -135,12 +154,12 @@ export const ChainSchema = z.object({
 export type ChainType = z.infer<typeof ChainSchema>;
 
 export type Operations =
-  | z.infer<typeof TrimParams>
-  | z.infer<typeof CutEndParams>
-  | z.infer<typeof ExtractAudioParams>
-  | z.infer<typeof TranscodeParams>
-  | z.infer<typeof MergeMediaSchema>
-  | z.infer<typeof AddAudioTrackSchema>
-  | z.infer<typeof RemoveAudioSchema>
-  | z.infer<typeof ResizeVideoSchema>
-  | z.infer<typeof ExtractThumbnailSchema>;
+  | TrimType
+  | CutEndType
+  | ExtractAudioType
+  | TranscodeType
+  | MergeMediaType
+  | AddAudioTrackType
+  | RemoveAudioType
+  | ResizeVideoType
+  | ExtractThumbnailType;

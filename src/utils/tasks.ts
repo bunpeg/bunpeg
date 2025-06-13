@@ -70,5 +70,5 @@ export async function restoreAllProcessingTasksToQueued() {
 export function logTask(taskId: Task['id'], message: string) {
   console.log(`------- Task: ${taskId} ------------`);
   console.log(message);
-  console.log('----------END---------');
+  console.log(' ');
 }
