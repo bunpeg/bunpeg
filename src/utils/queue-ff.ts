@@ -1,8 +1,23 @@
-import { getNextPendingTask, markPendingTasksForFileAsUnreachable, updateTask, type Task } from './tasks.ts';
-import { getFile, type UserFile } from './files.ts';
-import { cutEnd, extractAudio, transcode, trim } from './ffmpeg.ts';
-import type { CutEndOperation, ExtractAudioOperation, TranscodeOperation, TrimOperation } from '../schemas.ts';
 import { tryCatch } from './promises.ts';
+import { type UserFile } from './files.ts';
+import { getNextPendingTasks, markPendingTasksForFileAsUnreachable, type Task, updateTask } from './tasks.ts';
+import {
+  addAudioTrack,
+  cutEnd,
+  extractAudio,
+  extractThumbnail,
+  mergeMedia,
+  removeAudio,
+  resizeVideo,
+  transcode,
+  trim,
+} from './ffmpeg.ts';
+import {
+  AddAudioTrackSchema, CutEndSchema, ExtractAudioSchema,
+  ExtractThumbnailSchema,
+  MergeMediaSchema, RemoveAudioSchema,
+  ResizeVideoSchema, TranscodeSchema, TrimSchema,
+} from '../schemas.ts';
 
 const MAX_CONCURRENT_TASKS = Number(process.env.MAX_CONCURRENT_TASKS);
 
@@ -24,49 +39,50 @@ export function stopFFQueue() {
 
 async function runQueueLoop() {
   while (shouldRun) {
-    await executePass();
+    await tryCatch(executePass());
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
 }
 
 async function executePass() {
-  // logQueueMessage(`executing pass | active tasks: ${lockedFiles.size} | locked files: ${lockedFiles.size}`);
-  if (activeTasks.size >= MAX_CONCURRENT_TASKS) {
-    logQueueMessage('queue maxed out, going to sleep...')
-    return;
-  }
+  // Start as many tasks as possible up to the concurrency limit
+  if (shouldRun && activeTasks.size < MAX_CONCURRENT_TASKS) {
+    const availableSlots = MAX_CONCURRENT_TASKS - activeTasks.size;
+    const tasks = await getNextPendingTasks({ excludeFileIds: Array.from(lockedFiles), limit: availableSlots });
+    if (tasks.length === 0) return;
 
-  // TODO: fetch multiple tasks (depending on availability of the queue) and start them all
-  const task = await getNextPendingTask({ excludeFileIds: Array.from(lockedFiles) });
-  if (!task) {
-    // logQueueMessage('no pending task found, going to sleep...');
-    return;
+    for (const task of tasks) {
+      void startTask(task);
+    }
   }
+}
 
+async function startTask(task: Task) {
   logQueueMessage(`Picking up task: ${task.id} to ${task.operation}`);
-
   const { error: taskError } = await tryCatch(updateTask(task.id, { status: 'processing' }));
   if (taskError) {
-    console.error(taskError);
     logQueueMessage(`Failed to update task ${task.id} start processing, skipping cycle...`);
+    console.error(taskError);
     return;
   }
-
   // Lock task & file
   activeTasks.add(task.id);
   lockedFiles.add(task.file_id);
 
   const { error: operationError } = await tryCatch(runOperation(task));
   if (operationError) {
-    console.error(operationError);
-    logQueueMessage(`Failed to process task: ${task.id}`);
     await markPendingTasksForFileAsUnreachable(task.file_id);
+    logQueueMessage(`Failed to process task: ${task.id}`);
+    console.error(operationError);
   }
 
   removeTaskFromQueue(task.id);
   removeFileLock(task.file_id);
 
-  // console.log('completed cycle, restarting...');
+  // After finishing, try to fill the slot again
+  if (shouldRun) {
+    void executePass();
+  }
 }
 
 export function removeTaskFromQueue(taskId: Task['id']) {
@@ -80,30 +96,72 @@ export function removeFileLock(fileId: UserFile['id']) {
 }
 
 async function runOperation(task: Task) {
-  const { file_id, args: jsonArgs } = task;
-  const userFile = await getFile(file_id);
-  if (!userFile) {
-    throw  new Error(`No user file found`);
-  }
+  const { args: jsonArgs } = task;
 
-  const inputPath = userFile.file_path;
   switch (task.operation) {
     case 'transcode': {
-      const args = JSON.parse(jsonArgs) as TranscodeOperation;
-      await transcode(inputPath, args.format, task);
+      const parsed = TranscodeSchema.safeParse(JSON.parse(jsonArgs));
+      if (!parsed.success) throw new Error(`Invalid transcode args: ${JSON.stringify(parsed.error.issues)}`);
+      const args = parsed.data;
+      await transcode(args, task);
     } break;
+
+    case 'resize-video': {
+      const parsed = ResizeVideoSchema.safeParse(JSON.parse(jsonArgs));
+      if (!parsed.success) throw new Error(`Invalid resize-video args: ${JSON.stringify(parsed.error.issues)}`);
+      const args = parsed.data;
+      await resizeVideo(args, task);
+    } break;
+
     case 'trim': {
-      const args = JSON.parse(jsonArgs) as TrimOperation;
-      await trim(inputPath, args.start, args.duration, args.outputFormat, task);
+      const parsed = TrimSchema.safeParse(JSON.parse(jsonArgs));
+      if (!parsed.success) throw new Error(`Invalid trim args: ${JSON.stringify(parsed.error.issues)}`);
+      const args = parsed.data;
+      await trim(args, task);
     }  break;
+
     case 'trim-end': {
-      const args = JSON.parse(jsonArgs) as CutEndOperation;
-      await cutEnd(inputPath, args.duration, args.outputFormat, task);
+      const parsed = CutEndSchema.safeParse(JSON.parse(jsonArgs));
+      if (!parsed.success) throw new Error(`Invalid trim-end args: ${JSON.stringify(parsed.error.issues)}`);
+      const args = parsed.data;
+      await cutEnd(args, task);
     } break;
+
     case 'extract-audio': {
-      const args = JSON.parse(jsonArgs) as ExtractAudioOperation;
-      await extractAudio(inputPath, args.audioFormat, task);
+      const parsed = ExtractAudioSchema.safeParse(JSON.parse(jsonArgs));
+      if (!parsed.success) throw new Error(`Invalid extract-audio args: ${JSON.stringify(parsed.error.issues)}`);
+      const args = parsed.data;
+      await extractAudio(args, task);
     } break;
+
+    case 'remove-audio': {
+      const parsed = RemoveAudioSchema.safeParse(JSON.parse(jsonArgs));
+      if (!parsed.success) throw new Error(`Invalid remove-audio args: ${JSON.stringify(parsed.error.issues)}`);
+      const args = parsed.data;
+      await removeAudio(args, task);
+    } break;
+
+    case 'add-audio': {
+      const parsed = AddAudioTrackSchema.safeParse(JSON.parse(jsonArgs));
+      if (!parsed.success) throw new Error(`Invalid add-audio-track args: ${JSON.stringify(parsed.error.issues)}`);
+      const args = parsed.data;
+      await addAudioTrack(args, task);
+    } break;
+
+    case 'extract-thumbnail': {
+      const parsed = ExtractThumbnailSchema.safeParse(JSON.parse(jsonArgs));
+      if (!parsed.success) throw new Error(`Invalid extract-thumbnail args: ${JSON.stringify(parsed.error.issues)}`);
+      const args = parsed.data;
+      await extractThumbnail(args, task);
+    } break;
+
+    case 'merge-media': {
+      const parsed = MergeMediaSchema.safeParse(JSON.parse(jsonArgs));
+      if (!parsed.success) throw new Error(`Invalid merge-media args: ${JSON.stringify(parsed.error.issues)}`);
+      const args = parsed.data;
+      await mergeMedia(args, task);
+    } break;
+
     default:
       throw new Error(`Unhandled operation: ${task.operation}`);
   }
@@ -112,5 +170,5 @@ async function runOperation(task: Task) {
 function logQueueMessage(message: string) {
   console.log(`------- FFmpeg queue ------------`);
   console.log(message);
-  console.log('----------END---------');
+  console.log(' ');
 }
