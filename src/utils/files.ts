@@ -27,7 +27,6 @@ export async  function deleteFile(fileId: UserFile['id']) {
 }
 
 export async function checkFilesExist(fileIds: string[]): Promise<boolean> {
-  console.log('checkFilesExist', { fileIds, isArray: Array.isArray(fileIds) });
   if (fileIds.length === 0) return false;
 
   const rows = await sql`SELECT id FROM files WHERE id IN ${sql(fileIds.map((id) => ({ id })), 'id')}`;

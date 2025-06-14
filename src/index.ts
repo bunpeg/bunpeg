@@ -397,23 +397,7 @@ const server = serve({
       }
     },
 
-    "/extract-thumbnail": {
-      OPTIONS: async () => new Response('OK', { headers: CORS_HEADERS }),
-      POST: async (req) => {
-        const parsed = ExtractThumbnailSchema.safeParse(await req.json());
-        if (!parsed.success) {
-          return Response.json(parsed.error, { status: 400, headers: CORS_HEADERS });
-        }
-        const { fileId, timestamp, imageFormat } = parsed.data;
-        if (!(await checkFilesExist([fileId]))) {
-          return new Response("File not found", { status: 404, headers: CORS_HEADERS });
-        }
-        await createTask(fileId, 'extract-thumbnail', { fileId, timestamp, imageFormat });
-        return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS });
-      }
-    },
-
-    "/merge-media": {
+    "/merge": {
       OPTIONS: async () => new Response('OK', { headers: CORS_HEADERS }),
       POST: async (req) => {
         const parsed = MergeMediaSchema.safeParse(await req.json());
@@ -426,6 +410,22 @@ const server = serve({
           return new Response(`One or more files not found`, { status: 404, headers: CORS_HEADERS });
         }
         await createTask(fileIds[0]!, 'merge-media', { fileIds, outputFormat });
+        return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS });
+      }
+    },
+
+    "/extract-thumbnail": {
+      OPTIONS: async () => new Response('OK', { headers: CORS_HEADERS }),
+      POST: async (req) => {
+        const parsed = ExtractThumbnailSchema.safeParse(await req.json());
+        if (!parsed.success) {
+          return Response.json(parsed.error, { status: 400, headers: CORS_HEADERS });
+        }
+        const { fileId, timestamp, imageFormat } = parsed.data;
+        if (!(await checkFilesExist([fileId]))) {
+          return new Response("File not found", { status: 404, headers: CORS_HEADERS });
+        }
+        await createTask(fileId, 'extract-thumbnail', { fileId, timestamp, imageFormat });
         return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS });
       }
     },

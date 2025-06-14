@@ -114,14 +114,48 @@ export async function mergeMedia(args: MergeMediaType, task: Task) {
     fileIds: args.fileIds,
     outputFile: `${nanoid(8)}.${args.outputFormat}`,
     operation: async ({ inputPaths, outputPath }) => {
-      const listFile = path.join(TEMP_DIR, `${task.code}_concat.txt`);
-      const listContent = inputPaths.map(p => `file '${p}'`).join('\n');
-      await Bun.write(listFile, listContent);
+      // Step 1: Probe first video for width and height
+      const { data: probe, error: probeError } = await tryCatch(getVideoMetadata(inputPaths[0]!));
+      if (probeError) {
+        throw probeError;
+      }
+      const width = probe.resolution?.width;
+      const height = probe.resolution?.height;
+
+      if (!width || !height) {
+        throw new Error('Could not resolve resolution for the output video');
+      }
+
+      // filter chains array
+      const filterChains: string[] = [];
+      // inputs to concat (scaled & padded video + audio pairs)
+      const concatInputs: string[] = [];
+
+      inputPaths.forEach((_, i) => {
+        // Scale with aspect ratio preserved, then pad to exact size
+        filterChains.push(
+          `[${i}:v:0]scale=w=${width}:h=${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,setsar=1[v${i}]`
+        );
+        concatInputs.push(`[v${i}][${i}:a:0]`);
+      });
+
+      const filterComplex = `${filterChains.join(";")};${concatInputs.join("")}concat=n=${inputPaths.length}:v=1:a=1[outv][outa]`;
+
 
       const { error } = await tryCatch(
-        runFFmpeg(['-f', 'concat', '-safe', '0', '-i', listFile, '-c', 'copy', outputPath], task)
+        runFFmpeg([
+          ...inputPaths.flatMap((path) => ["-i", path]),
+          "-filter_complex", filterComplex,
+          "-map", "[outv]",
+          "-map", "[outa]",
+          "-c:v", "libx264",
+          "-preset", "fast",
+          "-crf", "22",
+          "-c:a", "aac",
+          "-b:a", "192k",
+          outputPath,
+        ], task)
       );
-      await cleanupFile(listFile);
       if (error) throw error;
     },
   });
@@ -218,8 +252,8 @@ async function getVideoMetadata(inputPath: string) {
     duration: format?.duration ? parseFloat(format.duration) : null,
     bit_rate: format?.bit_rate ? parseInt(format.bit_rate, 10) : null,
     resolution: {
-      width: stream?.width ?? null,
-      height: stream?.height ?? null,
+      width: stream?.width ? Number(stream.width) : null,
+      height: stream?.height ? Number(stream.height) : null,
     },
   };
 }
