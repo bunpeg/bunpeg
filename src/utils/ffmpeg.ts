@@ -167,7 +167,7 @@ export async function extractThumbnail(args: ExtractThumbnailType, task: Task) {
     fileIds: [args.fileId],
     outputFile: `${nanoid(8)}.${args.imageFormat}`,
     operation: ({ inputPaths, outputPath }) => {
-      return runFFmpeg(['-i', inputPaths[0]!, '-ss', args.timestamp, '-vframes', '1', outputPath], task);
+      return runFFmpeg(['-i', inputPaths[0]!, '-ss', args.timestamp, '-vframes', '1', '-update', '1', outputPath], task);
     },
   });
 }
