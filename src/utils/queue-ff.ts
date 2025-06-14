@@ -141,7 +141,15 @@ async function runOperation(task: Task) {
       const parsed = RemoveAudioParams.safeParse(JSON.parse(jsonArgs));
       if (!parsed.success) throw new Error(`Invalid remove-audio args: ${JSON.stringify(parsed.error.issues)}`);
       const args = parsed.data;
-      await removeAudio(task.file_id, args.outputFormat, task);
+      await removeAudio(inputPath, args.outputFormat, task);
+    } break;
+
+    case 'add-audio-track': {
+      const parsed = AddAudioTrackSchema.safeParse(JSON.parse(jsonArgs));
+      if (!parsed.success) throw new Error(`Invalid add-audio-track args: ${JSON.stringify(parsed.error.issues)}`);
+      const args = parsed.data;
+      // TODO: this is passing file ids when it should be passing the file S3 paths
+      await addAudioTrack(args.videoFileId, args.audioFileId, args.outputFormat, task);
     } break;
 
     case 'resize-video': {
@@ -164,14 +172,6 @@ async function runOperation(task: Task) {
       const args = parsed.data;
       // TODO: this is passing file ids when it should be passing the file S3 paths
       await mergeMedia(args.fileIds, args.outputFormat, task);
-    } break;
-
-    case 'add-audio-track': {
-      const parsed = AddAudioTrackSchema.safeParse(JSON.parse(jsonArgs));
-      if (!parsed.success) throw new Error(`Invalid add-audio-track args: ${JSON.stringify(parsed.error.issues)}`);
-      const args = parsed.data;
-      // TODO: this is passing file ids when it should be passing the file S3 paths
-      await addAudioTrack(args.videoFileId, args.audioFileId, args.outputFormat, task);
     } break;
 
     default:

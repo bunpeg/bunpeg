@@ -10,8 +10,8 @@ export interface UserFile {
 }
 
 export async function getFile(fileId: UserFile['id']) {
-  const query = await sql`SELECT * FROM files WHERE id = ${fileId}`;
-  return query[0] as UserFile | undefined;
+  const [file] = await sql`SELECT * FROM files WHERE id = ${fileId}`;
+  return file as UserFile | undefined;
 }
 
 export async function createFile(newFile: Omit<UserFile, 'metadata' | 'created_at'>) {
@@ -27,7 +27,9 @@ export async  function deleteFile(fileId: UserFile['id']) {
 }
 
 export async function checkFilesExist(fileIds: string[]): Promise<boolean> {
+  console.log('checkFilesExist', { fileIds, isArray: Array.isArray(fileIds) });
   if (fileIds.length === 0) return false;
-  const rows = await sql`SELECT id FROM files WHERE id IN ${sql(fileIds)}`;
+
+  const rows = await sql`SELECT id FROM files WHERE id IN ${sql(fileIds.map((id) => ({ id })), 'id')}`;
   return rows.length === fileIds.length;
 }

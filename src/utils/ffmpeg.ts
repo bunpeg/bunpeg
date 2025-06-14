@@ -14,9 +14,9 @@ import {
 } from './s3.ts';
 import { tryCatch } from './promises.ts';
 import { after } from './queue-bg.ts';
-import type { ExtractAudioType } from '../schemas.ts';
+import type { AudioFormat, ImageFormat, VideoFormat } from '../schemas.ts';
 
-export async function transcode(s3Path: string, outputFormat: string, task: Task) {
+export async function transcode(s3Path: string, outputFormat: VideoFormat, task: Task) {
   return handleS3DownAndUpSwap({
     task,
     s3Path,
@@ -27,7 +27,7 @@ export async function transcode(s3Path: string, outputFormat: string, task: Task
   });
 }
 
-export async function resizeVideo(s3Path: string, width: number, height: number, outputFormat: string, task: Task) {
+export async function resizeVideo(s3Path: string, width: number, height: number, outputFormat: VideoFormat, task: Task) {
   return handleS3DownAndUpSwap({
     task,
     s3Path,
@@ -38,7 +38,7 @@ export async function resizeVideo(s3Path: string, width: number, height: number,
   });
 }
 
-export async function trim(s3Path: string, start: number, duration: number, outputFormat: string, task: Task) {
+export async function trim(s3Path: string, start: number, duration: number, outputFormat: VideoFormat, task: Task) {
   return handleS3DownAndUpSwap({
     task,
     s3Path,
@@ -52,7 +52,7 @@ export async function trim(s3Path: string, start: number, duration: number, outp
   });
 }
 
-export async function cutEnd(s3Path: string, duration: number, outputFormat: string, task: Task) {
+export async function cutEnd(s3Path: string, duration: number, outputFormat: VideoFormat, task: Task) {
   return handleS3DownAndUpSwap({
     task,
     s3Path,
@@ -67,7 +67,7 @@ export async function cutEnd(s3Path: string, duration: number, outputFormat: str
   });
 }
 
-export async function extractAudio(s3Path: string, audioFormat: ExtractAudioType['audioFormat'], task: Task) {
+export async function extractAudio(s3Path: string, audioFormat: AudioFormat, task: Task) {
   const newFileId = nanoid(8);
   const outputFile = `${newFileId}.${audioFormat}`;
   return handleS3DownAndUpAppend({
@@ -80,7 +80,7 @@ export async function extractAudio(s3Path: string, audioFormat: ExtractAudioType
   });
 }
 
-export async function removeAudio(s3Path: string, outputFormat: string, task: Task) {
+export async function removeAudio(s3Path: string, outputFormat: VideoFormat, task: Task) {
   return handleS3DownAndUpSwap({
     task,
     s3Path,
@@ -171,7 +171,7 @@ export async function mergeMedia(s3Paths: string[], outputFormat: string, task: 
   await updateFile(task.file_id, { file_name: outputFile, file_path: outputFile });
 }
 
-export async function extractThumbnail(s3Path: string, timestamp: string, imageFormat: string, task: Task) {
+export async function extractThumbnail(s3Path: string, timestamp: string, imageFormat: ImageFormat, task: Task) {
   const newFileId = nanoid(8);
   const outputFile = `${newFileId}.${imageFormat}`;
   return handleS3DownAndUpAppend({
@@ -301,7 +301,7 @@ async function getAudioMetadata(inputPath: string) {
   };
 }
 
-export function getAudioEncodingParams(format: ExtractAudioType['audioFormat']): string[] {
+export function getAudioEncodingParams(format: AudioFormat): string[] {
   switch (format.toLowerCase()) {
     case "mp3":
       return ["-acodec", "libmp3lame", "-q:a", "2"]; // Good quality
