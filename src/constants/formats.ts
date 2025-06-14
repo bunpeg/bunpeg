@@ -1,12 +1,15 @@
 import type { AudioFormat, ImageFormat, VideoFormat } from '../schemas.ts';
 
-export const ALLOWED_MIME_TYPES = [
+export const VIDEO_MIME_TYPES = [
   "video/mp4",
   "video/x-matroska",    // .mkv
   "video/quicktime",     // .mov
   "video/x-msvideo",     // .avi
   "video/webm",
-  "video/mpeg",          // .mpeg
+  "video/mpeg",   // .mpeg
+];
+
+export const AUDIO_MIME_TYPES = [
   "audio/mpeg",          // .mp3
   "audio/mp4",           // .m4a
   "audio/aac",
@@ -16,6 +19,8 @@ export const ALLOWED_MIME_TYPES = [
   "audio/flac",
   "audio/x-wav",
 ];
+
+export const ALLOWED_MIME_TYPES = [...VIDEO_MIME_TYPES, ...AUDIO_MIME_TYPES];
 
 export const ALLOWED_VIDEO_FORMATS: VideoFormat[] = [
   "mp4",
