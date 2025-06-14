@@ -204,6 +204,7 @@ export async function getLocalFileMetadata(filePath: string) {
 
   const isVideo = mimeType.startsWith('video/');
   const isAudio = mimeType.startsWith('audio/');
+  const isImage = mimeType.startsWith('image/');
 
   if (isVideo) {
     const { data: meta, error } = await tryCatch(getVideoMetadata(filePath));
@@ -213,6 +214,12 @@ export async function getLocalFileMetadata(filePath: string) {
 
   if (isAudio) {
     const { data: meta, error } = await tryCatch(getAudioMetadata(filePath));
+    if (error) throw error;
+    return { meta, mimeType };
+  }
+
+  if (isImage) {
+    const { data: meta, error } = await tryCatch(getImageMetadata(filePath));
     if (error) throw error;
     return { meta, mimeType };
   }
@@ -286,6 +293,39 @@ async function getAudioMetadata(inputPath: string) {
     bit_rate: format?.bit_rate ? parseInt(format.bit_rate, 10) : null,
     sample_rate: stream?.sample_rate ? parseInt(stream.sample_rate, 10) : null,
     channels: stream?.channels ?? null,
+  };
+}
+
+async function getImageMetadata(inputPath: string) {
+  const proc = Bun.spawn([
+    "ffprobe",
+    "-v", "error",
+    "-select_streams", "v:0",
+    "-show_entries", "format=duration,size",
+    "-show_entries", "stream=width,height,color_range,color_space",
+    "-of", "json",
+    inputPath,
+  ]);
+
+  await proc.exited;
+
+  if (proc.exitCode !== 0) {
+    const error = await new Response(proc.stderr).text();
+    throw new Error(`ffprobe failed: ${error}`);
+  }
+
+  const result = await new Response(proc.stdout).json() as any;
+  const stream = result.streams?.[0];
+  const format = result.format;
+
+  return {
+    size: format?.size ? parseInt(format.size, 10) : null,
+    color_range: stream?.color_range,
+    color_space: stream?.color_space,
+    resolution: {
+      width: stream?.width ? Number(stream.width) : null,
+      height: stream?.height ? Number(stream.height) : null,
+    },
   };
 }
 
