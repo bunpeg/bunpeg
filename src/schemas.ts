@@ -126,12 +126,11 @@ export type RemoveAudioType = z.infer<typeof RemoveAudioSchema>;
 export const AddAudioTrackSchema = z.object({
   videoFileId: fileId,
   audioFileId: fileId,
-  // TODO: check if the operation can take video or audio as output, or just video
-  outputFormat: z.string().min(1, 'Output format is required'),
+  outputFormat: videoFormat,
 });
 
 export const AddAudioTrackSchemaWithType = AddAudioTrackSchema.extend({
-  type: z.literal('add-audio-track'),
+  type: z.literal('add-audio'),
 });
 
 export type AddAudioTrackType = z.infer<typeof AddAudioTrackSchema>;

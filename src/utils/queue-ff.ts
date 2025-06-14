@@ -141,7 +141,7 @@ async function runOperation(task: Task) {
       await removeAudio(args, task);
     } break;
 
-    case 'add-audio-track': {
+    case 'add-audio': {
       const parsed = AddAudioTrackSchema.safeParse(JSON.parse(jsonArgs));
       if (!parsed.success) throw new Error(`Invalid add-audio-track args: ${JSON.stringify(parsed.error.issues)}`);
       const args = parsed.data;

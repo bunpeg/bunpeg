@@ -17,6 +17,7 @@ import type {
   ResizeVideoType,
   TranscodeType,
   TrimType,
+  VideoFormat,
 } from '../schemas.ts';
 
 export async function transcode(args: TranscodeType, task: Task) {
@@ -78,7 +79,7 @@ export async function extractAudio(args: ExtractAudioType, task: Task) {
     fileIds: [args.fileId],
     outputFile,
     operation: ({ inputPaths, outputPath }) => {
-      return runFFmpeg(["-i", inputPaths[0]!, "-vn", ...getAudioEncodingParams(args.audioFormat), outputPath], task);
+      return runFFmpeg(["-i", inputPaths[0]!, "-vn", ...getAudioCodecs(args.audioFormat), outputPath], task);
     },
   });
 }
@@ -98,7 +99,11 @@ export async function addAudioTrack(args: AddAudioTrackType, task: Task) {
     fileIds: [args.videoFileId, args.audioFileId],
     outputFile: `${nanoid(8)}.${args.outputFormat}`,
     operation: async ({ inputPaths, outputPath }) => {
-      await runFFmpeg(['-i', inputPaths[0]!, '-i', inputPaths[1]!, '-c:v', 'copy', '-map', '0:v:0', '-map', '1:a:0', '-shortest', outputPath], task);
+      const videoPath = inputPaths[0]!;
+      const audioPath = inputPaths[1]!;
+      const audioCodecArgs = getAudioCodecsForVideo(path.extname(audioPath) as AudioFormat, args.outputFormat);
+
+      await runFFmpeg(['-i', videoPath, '-i', audioPath, '-c:v', 'copy', ...audioCodecArgs, '-map', '0:v:0', '-map', '1:a:0', '-shortest', outputPath], task);
     },
   })
 }
@@ -250,7 +255,7 @@ async function getAudioMetadata(inputPath: string) {
   };
 }
 
-export function getAudioEncodingParams(format: AudioFormat): string[] {
+function getAudioCodecs(format: AudioFormat): string[] {
   switch (format.toLowerCase()) {
     case "mp3":
       return ["-acodec", "libmp3lame", "-q:a", "2"]; // Good quality
@@ -266,6 +271,77 @@ export function getAudioEncodingParams(format: AudioFormat): string[] {
     default:
       throw new Error(`Unsupported audio format: ${format}`);
   }
+}
+
+function getAudioCodecsForVideo(audioFormat: AudioFormat, outputFormat: VideoFormat): string[] {
+  // Always re-encode if incompatible
+  switch (outputFormat) {
+    case "mp4":
+    case "mov":
+      return audioFormat === "aac" || audioFormat === "mp3"
+        ? ["-c:a", "copy"]
+        : ["-c:a", "aac", "-b:a", "192k"];
+
+    case "webm":
+      return audioFormat === "opus"
+        ? ["-c:a", "copy"]
+        : ["-c:a", "libopus", "-b:a", "128k"];
+
+    case "mkv":
+      // MKV supports most codecs, but safest default is AAC
+      return audioFormat === "aac" || audioFormat === "mp3" || audioFormat === "flac" || audioFormat === "opus"
+        ? ["-c:a", "copy"]
+        : ["-c:a", "aac", "-b:a", "192k"];
+
+    case "avi":
+      return audioFormat === "mp3" || audioFormat === "wav"
+        ? ["-c:a", "copy"]
+        : ["-c:a", "mp3"];
+
+    default:
+      throw new Error(`Unsupported output format: ${outputFormat}`);
+  }
+}
+
+function validateMuxCombination(videoFormat: string, audioFormat: string, outputFormat: VideoFormat) {
+  const allowedAudio: Record<VideoFormat, AudioFormat[]> = {
+    mp4: ["aac", "mp3"],
+    mov: ["aac", "wav"],
+    avi: ["mp3", "wav"],
+    mkv: ["aac", "mp3", "m4a", "flac", "wav", "opus"],
+    webm: ["opus"],
+  };
+
+  const allowedVideo: Record<VideoFormat, VideoFormat[]> = {
+    mp4: ["mp4", "mov", "avi"],       // assuming H.264
+    mov: ["mp4", "mov", "avi"],
+    avi: ["mp4", "avi"],
+    mkv: ["mp4", "mkv", "webm", "avi", "mov"],
+    webm: ["webm"],                   // must be VP8/VP9
+  };
+
+  if (!allowedAudio[outputFormat] || !allowedVideo[outputFormat]) {
+    return {
+      valid: false as const,
+      reason: `Unsupported output format: ${outputFormat}`,
+    };
+  }
+
+  if (!allowedAudio[outputFormat].includes(audioFormat as AudioFormat)) {
+    return {
+      valid: false as const,
+      reason: `Audio format '${audioFormat}' is not valid for output format '${outputFormat}'`,
+    };
+  }
+
+  if (!allowedVideo[outputFormat].includes(videoFormat as VideoFormat)) {
+    return {
+      valid: false as const,
+      reason: `Video format '${videoFormat}' is not valid for output format '${outputFormat}'`,
+    };
+  }
+
+  return { valid: true as const, reason: undefined };
 }
 
 async function runFFmpeg(args: string[], task: Task) {

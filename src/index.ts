@@ -380,7 +380,7 @@ const server = serve({
       }
     },
 
-    "/add-audio-track": {
+    "/add-audio": {
       OPTIONS: async () => new Response('OK', { headers: CORS_HEADERS }),
       POST: async (req) => {
         const parsed = AddAudioTrackSchema.safeParse(await req.json());
@@ -392,7 +392,7 @@ const server = serve({
         if (!(await checkFilesExist([videoFileId, audioFileId]))) {
           return new Response("Video or audio file not found", { status: 404, headers: CORS_HEADERS });
         }
-        await createTask(videoFileId, 'add-audio-track', { videoFileId, audioFileId, outputFormat });
+        await createTask(videoFileId, 'add-audio', { videoFileId, audioFileId, outputFormat });
         return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS });
       }
     },
