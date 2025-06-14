@@ -1,5 +1,5 @@
 import { tryCatch } from './promises.ts';
-import { getFile, type UserFile } from './files.ts';
+import { type UserFile } from './files.ts';
 import { getNextPendingTasks, markPendingTasksForFileAsUnreachable, type Task, updateTask } from './tasks.ts';
 import {
   addAudioTrack,
@@ -106,6 +106,13 @@ async function runOperation(task: Task) {
       await transcode(args, task);
     } break;
 
+    case 'resize-video': {
+      const parsed = ResizeVideoSchema.safeParse(JSON.parse(jsonArgs));
+      if (!parsed.success) throw new Error(`Invalid resize-video args: ${JSON.stringify(parsed.error.issues)}`);
+      const args = parsed.data;
+      await resizeVideo(args, task);
+    } break;
+
     case 'trim': {
       const parsed = TrimSchema.safeParse(JSON.parse(jsonArgs));
       if (!parsed.success) throw new Error(`Invalid trim args: ${JSON.stringify(parsed.error.issues)}`);
@@ -139,13 +146,6 @@ async function runOperation(task: Task) {
       if (!parsed.success) throw new Error(`Invalid add-audio-track args: ${JSON.stringify(parsed.error.issues)}`);
       const args = parsed.data;
       await addAudioTrack(args, task);
-    } break;
-
-    case 'resize-video': {
-      const parsed = ResizeVideoSchema.safeParse(JSON.parse(jsonArgs));
-      if (!parsed.success) throw new Error(`Invalid resize-video args: ${JSON.stringify(parsed.error.issues)}`);
-      const args = parsed.data;
-      await resizeVideo(args, task);
     } break;
 
     case 'extract-thumbnail': {

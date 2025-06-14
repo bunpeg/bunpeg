@@ -84,14 +84,14 @@ export async function handleS3DownAndUpAppend(params: Params) {
       const { task, outputFile } = params;
 
       const newFileId = extractFileName(outputFile);
-      const newAudioFile = Bun.file(outputFile);
+      const newFile = Bun.file(outputFile);
       const { data: newFileName } = await tryCatch(resolveNewFileName(task.file_id, outputFile));
 
       await createFile({
         id: newFileId,
         file_name: newFileName ?? outputFile,
         file_path: outputFile,
-        mime_type: newAudioFile.type,
+        mime_type: newFile.type,
       });
 
       const { data: metadata } = await tryCatch(getLocalFileMetadata(outputPath));
