@@ -25,9 +25,9 @@ export async function uploadToS3FromDisk(localPath: string, s3Path: string) {
 
 interface Params {
   task: Task;
-  s3Path: string;
+  fileIds: string[];
   outputFile: string;
-  operation: (inputPath: string, outputPath: string) => Promise<void>;
+  operation: (params: { s3Paths: string[]; inputPaths: string[]; outputPath: string }) => Promise<void>;
 }
 
 /**
@@ -38,10 +38,8 @@ interface Params {
 export async function handleS3DownAndUpSwap(params: Params) {
   await __executeS3DownAndUp(
     params,
-    async () => {
-      const { task, s3Path, outputFile } = params;
-      const inputPath = path.join(TEMP_DIR, s3Path);
-      const outputPath = path.join(TEMP_DIR, outputFile);
+    async ({ s3Paths, inputPaths, outputPath  }) => {
+      const { task, outputFile } = params;
 
       const { data: newFileName, error: fileNameError } = await tryCatch(resolveNewFileName(task.file_id, outputFile));
       if (fileNameError) {
@@ -63,10 +61,12 @@ export async function handleS3DownAndUpSwap(params: Params) {
       });
 
       after(async () => {
-        const s3File = spaces.file(s3Path);
-        await s3File.delete();
-        await cleanUpFile(inputPath);
-        await cleanUpFile(outputPath);
+        for (const s3Path of s3Paths) {
+          const s3File = spaces.file(s3Path);
+          await s3File.delete();
+        }
+
+        await createAfterCleanup([...inputPaths, outputPath])();
       });
     },
   );
@@ -80,10 +80,8 @@ export async function handleS3DownAndUpSwap(params: Params) {
 export async function handleS3DownAndUpAppend(params: Params) {
   await __executeS3DownAndUp(
     params,
-    async () => {
-      const { task, s3Path, outputFile } = params;
-      const inputPath = path.join(TEMP_DIR, s3Path);
-      const outputPath = path.join(TEMP_DIR, outputFile);
+    async ({ inputPaths, outputPath }) => {
+      const { task, outputFile } = params;
 
       const newFileId = extractFileName(outputFile);
       const newAudioFile = Bun.file(outputFile);
@@ -96,15 +94,12 @@ export async function handleS3DownAndUpAppend(params: Params) {
         mime_type: newAudioFile.type,
       });
 
-      const { data: metadata, error } = await tryCatch(getLocalFileMetadata(outputPath));
+      const { data: metadata } = await tryCatch(getLocalFileMetadata(outputPath));
       if (metadata) {
         await updateFile(newFileId, { metadata: JSON.stringify(metadata.meta) });
       }
 
-      after(async () => {
-        await cleanUpFile(inputPath);
-        await cleanUpFile(outputPath);
-      });
+      after(createAfterCleanup([...inputPaths, outputPath]));
     },
   );
 }
@@ -113,42 +108,50 @@ export async function handleS3DownAndUpAppend(params: Params) {
  * This is the function that actually handles downloading the source file from the S3 client
  * and the subsequent upload, leaving the cleanup to the caller.
  */
-async function __executeS3DownAndUp(params: Params, cleanup: () => Promise<void>) {
-  const { task, s3Path, outputFile, operation } = params;
-  const inputPath = path.join(TEMP_DIR, s3Path);
+async function __executeS3DownAndUp(params: Params, cleanup: Params['operation']) {
+  const { task, fileIds, outputFile, operation } = params;
+
+  const s3Paths: string[] = [];
+  const inputPaths: string[] = [];
   const outputPath = path.join(TEMP_DIR, outputFile);
 
-  const { error: downloadError } = await tryCatch(downloadFromS3ToDisk(s3Path, inputPath));
-  if (downloadError) {
-    logTask(task.id, 'Failed to download from S3');
-    after(async () => {
-      await cleanUpFile(inputPath);
-      await cleanUpFile(outputPath);
-    });
-    throw downloadError;
+  for (const fileId of fileIds) {
+    const { data: file, error } = await tryCatch(getFile(fileId));
+    if (error || !file) {
+      throw new Error(`Could not find file ${fileId}`);
+    }
+
+    s3Paths.push(file.file_path);
   }
 
-  const { error: operationError } = await tryCatch(operation(inputPath, outputPath));
+  for (const s3Path of s3Paths) {
+    const localPath = path.join(TEMP_DIR, s3Path);
+
+    const { error: downloadError } = await tryCatch(downloadFromS3ToDisk(s3Path, localPath));
+    if (downloadError) {
+      logTask(task.id, `Failed to download file ${s3Path} from S3`);
+      after(createAfterCleanup([...inputPaths, outputPath]));
+      throw downloadError;
+    }
+
+    inputPaths.push(localPath);
+  }
+
+  const { error: operationError } = await tryCatch(operation({ s3Paths, inputPaths, outputPath }));
   if (operationError) {
     logTask(task.id, 'Failed to execute operation');
-    after(async () => {
-      await cleanUpFile(inputPath);
-      await cleanUpFile(outputPath);
-    });
+    after(createAfterCleanup([...inputPaths, outputPath]));
     throw operationError;
   }
 
   const { error: uploadError } = await tryCatch(uploadToS3FromDisk(outputPath, outputFile));
   if (uploadError) {
     logTask(task.id, 'Failed to upload from S3');
-    after(async () => {
-      await cleanUpFile(inputPath);
-      await cleanUpFile(outputPath);
-    });
+    after(createAfterCleanup([...inputPaths, outputPath]));
     throw uploadError;
   }
 
-  await cleanup();
+  await cleanup({ s3Paths, inputPaths, outputPath });
 }
 
 export async function resolveNewFileName(fileId: UserFile['id'], outputFile: string) {
@@ -167,7 +170,15 @@ function extractFileName(fileName: string) {
   return path.basename(`${TEMP_DIR}/${fileName}`, oldExt);
 }
 
-export async function cleanUpFile(path: string) {
+const createAfterCleanup = (filePaths: string[]) => {
+  return async () => {
+    for (const iPath of filePaths) {
+      await cleanupFile(iPath);
+    }
+  }
+}
+
+export async function cleanupFile(path: string) {
   const file = Bun.file(path);
 
   if (await file.exists()) {

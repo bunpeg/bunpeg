@@ -274,7 +274,7 @@ const server = serve({
           return new Response("File not found", { status: 404, headers: CORS_HEADERS });
         }
 
-        await createTask(fileId, 'transcode', { format });
+        await createTask(fileId, 'transcode', { fileId, format });
         return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS });
       }
     },
@@ -290,7 +290,7 @@ const server = serve({
         if (!(await checkFilesExist([fileId]))) {
           return new Response("File not found", { status: 404, headers: CORS_HEADERS });
         }
-        await createTask(fileId, 'resize-video', { width, height, outputFormat });
+        await createTask(fileId, 'resize-video', { fileId, width, height, outputFormat });
         return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS });
       }
     },
@@ -313,7 +313,7 @@ const server = serve({
           return new Response("File not found", { status: 404, headers: CORS_HEADERS });
         }
 
-        await createTask(fileId, 'trim', { start, duration, outputFormat });
+        await createTask(fileId, 'trim', { fileId, start, duration, outputFormat });
         return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS });
       }
     },
@@ -336,7 +336,7 @@ const server = serve({
           return new Response('File not found', { status: 400, headers: CORS_HEADERS });
         }
 
-        await createTask(fileId, 'trim-end', { duration, outputFormat });
+        await createTask(fileId, 'trim-end', { fileId, duration, outputFormat });
         return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS });
       }
     },
@@ -358,7 +358,7 @@ const server = serve({
           return new Response("File not found", { status: 404, headers: CORS_HEADERS });
         }
 
-        await createTask(fileId, 'extract-audio', { audioFormat });
+        await createTask(fileId, 'extract-audio', { fileId, audioFormat });
         return Response.json({ success: true },  { status: 200, headers: CORS_HEADERS });
       }
     },
@@ -375,7 +375,7 @@ const server = serve({
           return new Response("File not found", { status: 404, headers: CORS_HEADERS });
         }
 
-        await createTask(fileId, 'remove-audio', { outputFormat });
+        await createTask(fileId, 'remove-audio', { fileId, outputFormat });
         return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS });
       }
     },
@@ -408,7 +408,7 @@ const server = serve({
         if (!(await checkFilesExist([fileId]))) {
           return new Response("File not found", { status: 404, headers: CORS_HEADERS });
         }
-        await createTask(fileId, 'extract-thumbnail', { timestamp, imageFormat });
+        await createTask(fileId, 'extract-thumbnail', { fileId, timestamp, imageFormat });
         return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS });
       }
     },
@@ -449,7 +449,7 @@ const server = serve({
         await bulkCreateTasks(operations.map(({ type: operation, ...args }) => ({
           fileId,
           operation,
-          args,
+          args: { ...args, fileId },
         })))
 
         return Response.json({ success: true },  { status: 200, headers: CORS_HEADERS });

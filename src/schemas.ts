@@ -32,97 +32,100 @@ export const imageFormat = z.enum([
 ]);
 export type ImageFormat = z.infer<typeof imageFormat>;
 
-export const TranscodeParams = z.object({
+const fileId = z.string().min(1, "fileId is required");
+
+const TranscodeParams = z.object({
   format: videoFormat,
 });
 
 export const TranscodeSchema = TranscodeParams.extend({
-  fileId: z.string().min(1, "fileId is required"),
+  fileId,
 });
 
 export const TranscodeSchemaWithType = TranscodeParams.extend({
   type: z.literal("transcode"),
 });
 
-export type TranscodeType = z.infer<typeof TranscodeParams>;
+export type TranscodeType = z.infer<typeof TranscodeSchema>;
 
-export const TrimParams = z.object({
+const ResizeVideoParams = z.object({
+  width: z.number().int().min(1, 'Width required'),
+  height: z.number().int().min(1, 'Height required'),
+  outputFormat: videoFormat,
+});
+
+export const ResizeVideoSchema = ResizeVideoParams.extend({
+  fileId,
+});
+
+export const ResizeVideoSchemaWithType = ResizeVideoParams.extend({
+  type: z.literal('resize-video'),
+});
+
+export type ResizeVideoType = z.infer<typeof ResizeVideoSchema>;
+
+const TrimParams = z.object({
   start: z.number({ required_error: "Start time is required" }),
   duration: z.number({ required_error: "Duration is required" }),
   outputFormat: videoFormat,
 });
 
 export const TrimSchema = TrimParams.extend({
-  fileId: z.string().min(1, "fileId is required"),
+  fileId,
 });
 
 export const TrimSchemaWithType = TrimParams.extend({
   type: z.literal("trim"),
 });
 
-export type TrimType = z.infer<typeof TrimParams>;
+export type TrimType = z.infer<typeof TrimSchema>;
 
-export const CutEndParams = z.object({
+const CutEndParams = z.object({
   duration: z.number({ required_error: "Duration is required" }),
   outputFormat: videoFormat,
 });
 
 export const CutEndSchema = CutEndParams.extend({
-  fileId: z.string().min(1, "fileId is required"),
+  fileId,
 });
 
 export const CutEndSchemaWithType = CutEndParams.extend({
   type: z.literal("trim-end"),
 });
 
-export type CutEndType = z.infer<typeof CutEndParams>;
+export type CutEndType = z.infer<typeof CutEndSchema>;
 
-export const ExtractAudioParams = z.object({
+const ExtractAudioParams = z.object({
   audioFormat: audioFormat,
 });
 
 export const ExtractAudioSchema = ExtractAudioParams.extend({
-  fileId: z.string().min(1, "fileId is required"),
+  fileId,
 });
 
 export const ExtractAudioSchemaWithType = ExtractAudioParams.extend({
   type: z.literal("extract-audio"),
 });
 
-export type ExtractAudioType = z.infer<typeof ExtractAudioParams>;
+export type ExtractAudioType = z.infer<typeof ExtractAudioSchema>;
 
-export const RemoveAudioParams = z.object({
+const RemoveAudioParams = z.object({
   outputFormat: videoFormat,
 })
 
 export const RemoveAudioSchema = RemoveAudioParams.extend({
-  fileId: z.string().min(1, 'fileId is required'),
+  fileId,
 });
 
 export const RemoveAudioSchemaWithType = RemoveAudioParams.extend({
   type: z.literal('remove-audio'),
 });
 
-export type RemoveAudioType = z.infer<typeof RemoveAudioParams>;
+export type RemoveAudioType = z.infer<typeof RemoveAudioSchema>;
 
-export const MergeMediaSchema = z.object({
-  fileIds: z.array(
-    z.string().min(1, 'fileId is required')
-  ).min(2, 'At least two files required'),
-  // TODO: check if the operation can take video or audio as output, or just video
-  outputFormat: z.string().min(1, 'Output format is required'),
-});
-
-export const MergeMediaSchemaWithType = MergeMediaSchema.extend({
-  type: z.literal('merge-media'),
-});
-
-export type MergeMediaType = z.infer<typeof MergeMediaSchema>;
-
-// Add audio track
 export const AddAudioTrackSchema = z.object({
-  videoFileId: z.string().min(1, 'videoFileId is required'),
-  audioFileId: z.string().min(1, 'audioFileId is required'),
+  videoFileId: fileId,
+  audioFileId: fileId,
   // TODO: check if the operation can take video or audio as output, or just video
   outputFormat: z.string().min(1, 'Output format is required'),
 });
@@ -133,21 +136,17 @@ export const AddAudioTrackSchemaWithType = AddAudioTrackSchema.extend({
 
 export type AddAudioTrackType = z.infer<typeof AddAudioTrackSchema>;
 
-export const ResizeVideoParams = z.object({
-  width: z.number().int().min(1, 'Width required'),
-  height: z.number().int().min(1, 'Height required'),
-  outputFormat: videoFormat,
+export const MergeMediaSchema = z.object({
+  fileIds: z.array(fileId).min(2, 'At least two files required'),
+  // TODO: check if the operation can take video or audio as output, or just video
+  outputFormat: z.string().min(1, 'Output format is required'),
 });
 
-export const ResizeVideoSchema = ResizeVideoParams.extend({
-  fileId: z.string().min(1, 'fileId is required'),
+export const MergeMediaSchemaWithType = MergeMediaSchema.extend({
+  type: z.literal('merge-media'),
 });
 
-export const ResizeVideoSchemaWithType = ResizeVideoParams.extend({
-  type: z.literal('resize-video'),
-});
-
-export type ResizeVideoType = z.infer<typeof ResizeVideoParams>;
+export type MergeMediaType = z.infer<typeof MergeMediaSchema>;
 
 export const ExtractThumbnailParams = z.object({
   timestamp: z.string().min(1, 'Timestamp required'),
@@ -155,14 +154,14 @@ export const ExtractThumbnailParams = z.object({
 })
 
 export const ExtractThumbnailSchema = ExtractThumbnailParams.extend({
-  fileId: z.string().min(1, 'fileId is required'),
+  fileId,
 });
 
 export const ExtractThumbnailSchemaWithType = ExtractThumbnailParams.extend({
   type: z.literal('extract-thumbnail'),
 });
 
-export type ExtractThumbnailType = z.infer<typeof ExtractThumbnailParams>;
+export type ExtractThumbnailType = z.infer<typeof ExtractThumbnailSchema>;
 
 // Union for chained operations
 
@@ -179,18 +178,18 @@ export const OperationSchema = z.union([
 ]);
 
 export const ChainSchema = z.object({
-  fileId: z.string().min(1, "fileId is required"),
+  fileId,
   operations: z.array(OperationSchema).min(1, "At least one operation is required"),
 });
 export type ChainType = z.infer<typeof ChainSchema>;
 
 export type Operations =
+  | TranscodeType
+  | ResizeVideoType
   | TrimType
   | CutEndType
   | ExtractAudioType
-  | TranscodeType
-  | MergeMediaType
   | AddAudioTrackType
   | RemoveAudioType
-  | ResizeVideoType
+  | MergeMediaType
   | ExtractThumbnailType;

@@ -13,15 +13,10 @@ import {
   trim,
 } from './ffmpeg.ts';
 import {
-  AddAudioTrackSchema,
-  CutEndParams,
-  ExtractAudioParams,
+  AddAudioTrackSchema, CutEndSchema, ExtractAudioSchema,
   ExtractThumbnailSchema,
-  MergeMediaSchema,
-  RemoveAudioParams,
-  ResizeVideoSchema,
-  TranscodeParams,
-  TrimParams,
+  MergeMediaSchema, RemoveAudioSchema,
+  ResizeVideoSchema, TranscodeSchema, TrimSchema,
 } from '../schemas.ts';
 
 const MAX_CONCURRENT_TASKS = Number(process.env.MAX_CONCURRENT_TASKS);
@@ -101,77 +96,70 @@ export function removeFileLock(fileId: UserFile['id']) {
 }
 
 async function runOperation(task: Task) {
-  const { file_id, args: jsonArgs } = task;
-  const userFile = await getFile(file_id);
-  if (!userFile) {
-    throw  new Error(`No user file found`);
-  }
+  const { args: jsonArgs } = task;
 
-  const inputPath = userFile.file_path;
   switch (task.operation) {
     case 'transcode': {
-      const parsed = TranscodeParams.safeParse(JSON.parse(jsonArgs));
+      const parsed = TranscodeSchema.safeParse(JSON.parse(jsonArgs));
       if (!parsed.success) throw new Error(`Invalid transcode args: ${JSON.stringify(parsed.error.issues)}`);
       const args = parsed.data;
-      await transcode(inputPath, args.format, task);
+      await transcode(args, task);
     } break;
 
     case 'trim': {
-      const parsed = TrimParams.safeParse(JSON.parse(jsonArgs));
+      const parsed = TrimSchema.safeParse(JSON.parse(jsonArgs));
       if (!parsed.success) throw new Error(`Invalid trim args: ${JSON.stringify(parsed.error.issues)}`);
       const args = parsed.data;
-      await trim(inputPath, args.start, args.duration, args.outputFormat, task);
+      await trim(args, task);
     }  break;
 
     case 'trim-end': {
-      const parsed = CutEndParams.safeParse(JSON.parse(jsonArgs));
+      const parsed = CutEndSchema.safeParse(JSON.parse(jsonArgs));
       if (!parsed.success) throw new Error(`Invalid trim-end args: ${JSON.stringify(parsed.error.issues)}`);
       const args = parsed.data;
-      await cutEnd(inputPath, args.duration, args.outputFormat, task);
+      await cutEnd(args, task);
     } break;
 
     case 'extract-audio': {
-      const parsed = ExtractAudioParams.safeParse(JSON.parse(jsonArgs));
+      const parsed = ExtractAudioSchema.safeParse(JSON.parse(jsonArgs));
       if (!parsed.success) throw new Error(`Invalid extract-audio args: ${JSON.stringify(parsed.error.issues)}`);
       const args = parsed.data;
-      await extractAudio(inputPath, args.audioFormat, task);
+      await extractAudio(args, task);
     } break;
 
     case 'remove-audio': {
-      const parsed = RemoveAudioParams.safeParse(JSON.parse(jsonArgs));
+      const parsed = RemoveAudioSchema.safeParse(JSON.parse(jsonArgs));
       if (!parsed.success) throw new Error(`Invalid remove-audio args: ${JSON.stringify(parsed.error.issues)}`);
       const args = parsed.data;
-      await removeAudio(inputPath, args.outputFormat, task);
+      await removeAudio(args, task);
     } break;
 
     case 'add-audio-track': {
       const parsed = AddAudioTrackSchema.safeParse(JSON.parse(jsonArgs));
       if (!parsed.success) throw new Error(`Invalid add-audio-track args: ${JSON.stringify(parsed.error.issues)}`);
       const args = parsed.data;
-      // TODO: this is passing file ids when it should be passing the file S3 paths
-      await addAudioTrack(args.videoFileId, args.audioFileId, args.outputFormat, task);
+      await addAudioTrack(args, task);
     } break;
 
     case 'resize-video': {
       const parsed = ResizeVideoSchema.safeParse(JSON.parse(jsonArgs));
       if (!parsed.success) throw new Error(`Invalid resize-video args: ${JSON.stringify(parsed.error.issues)}`);
       const args = parsed.data;
-      await resizeVideo(args.fileId, args.width, args.height, args.outputFormat, task);
+      await resizeVideo(args, task);
     } break;
 
     case 'extract-thumbnail': {
       const parsed = ExtractThumbnailSchema.safeParse(JSON.parse(jsonArgs));
       if (!parsed.success) throw new Error(`Invalid extract-thumbnail args: ${JSON.stringify(parsed.error.issues)}`);
       const args = parsed.data;
-      await extractThumbnail(args.fileId, args.timestamp, args.imageFormat, task);
+      await extractThumbnail(args, task);
     } break;
 
     case 'merge-media': {
       const parsed = MergeMediaSchema.safeParse(JSON.parse(jsonArgs));
       if (!parsed.success) throw new Error(`Invalid merge-media args: ${JSON.stringify(parsed.error.issues)}`);
       const args = parsed.data;
-      // TODO: this is passing file ids when it should be passing the file S3 paths
-      await mergeMedia(args.fileIds, args.outputFormat, task);
+      await mergeMedia(args, task);
     } break;
 
     default:
