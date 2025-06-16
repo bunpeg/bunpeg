@@ -1,4 +1,4 @@
-import type { AudioFormat, ImageFormat, VideoFormat } from '../schemas.ts';
+import type { AudioFormat, ImageFormat, VideoFormat } from './schemas.ts';
 
 export const VIDEO_MIME_TYPES = [
   "video/mp4",
