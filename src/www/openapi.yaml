@@ -5,12 +5,12 @@ info:
   description: A platform for performing FFmpeg operations via API endpoints.
 
 servers:
-  - url: http://localhost:8000
+  - url: http://api.bunpeg.io
 
 paths:
   /upload:
     post:
-      summary: Upload a media file
+      summary: Upload a media file, currently you can upload video or audio of up to 500MB
       requestBody:
         required: true
         content:
