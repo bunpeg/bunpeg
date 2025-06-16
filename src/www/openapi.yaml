@@ -33,21 +33,102 @@ paths:
                 properties:
                   fileId:
                     type: string
-                  key:
-                    type: string
 
-  /extract-audio:
-    post:
-      summary: Extract audio from a video file
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ExtractAudioSchema'
+  /meta/{fileId}:
+    get:
+      summary: Get metadata for a file
+      parameters:
+        - name: fileId
+          in: path
+          required: true
+          schema:
+            type: string
       responses:
         '200':
-          description: Audio extracted successfully
+          description: File metadata retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /status/{fileId}:
+    get:
+      summary: Get processing status for a file
+      parameters:
+        - name: fileId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Status retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  fileId:
+                    type: string
+                  status:
+                    type: string
+                    enum: [not-found, pending, completed, failed]
+
+  /output/{fileId}:
+    get:
+      summary: Get the output file
+      parameters:
+        - name: fileId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: File retrieved successfully
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  /download/{fileId}:
+    get:
+      summary: Download a file and delete it after
+      parameters:
+        - name: fileId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: File downloaded successfully
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  /delete/{fileId}:
+    delete:
+      summary: Delete a file and its associated tasks
+      parameters:
+        - name: fileId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: File deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  fileId:
+                    type: string
 
   /transcode:
     post:
@@ -61,6 +142,33 @@ paths:
       responses:
         '200':
           description: Transcode successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+
+  /resize-video:
+    post:
+      summary: Resize a video to different dimensions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResizeVideoSchema'
+      responses:
+        '200':
+          description: Resize successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
 
   /trim:
     post:
@@ -74,8 +182,15 @@ paths:
       responses:
         '200':
           description: Trim successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
 
-  /cut-end:
+  /trim-end:
     post:
       summary: Cut a segment from the end of a video
       requestBody:
@@ -87,6 +202,113 @@ paths:
       responses:
         '200':
           description: Segment removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+
+  /extract-audio:
+    post:
+      summary: Extract audio from a video file
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExtractAudioSchema'
+      responses:
+        '200':
+          description: Audio extracted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+
+  /remove-audio:
+    post:
+      summary: Remove audio track from a video
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RemoveAudioSchema'
+      responses:
+        '200':
+          description: Audio removed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+
+  /add-audio:
+    post:
+      summary: Add an audio track to a video
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddAudioTrackSchema'
+      responses:
+        '200':
+          description: Audio added successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+
+  /merge:
+    post:
+      summary: Merge multiple media files
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MergeMediaSchema'
+      responses:
+        '200':
+          description: Files merged successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+
+  /extract-thumbnail:
+    post:
+      summary: Extract a thumbnail from a video
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExtractThumbnailSchema'
+      responses:
+        '200':
+          description: Thumbnail extracted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
 
   /chain:
     post:
@@ -100,32 +322,13 @@ paths:
       responses:
         '200':
           description: All operations queued
-
-  /add-audio:
-    post:
-      summary: Add an audio track to a video
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AddAudioSchema'
-      responses:
-        '200':
-          description: Audio added
-
-  /screenshot:
-    post:
-      summary: Extract a screenshot from a video
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ScreenshotSchema'
-      responses:
-        '200':
-          description: Screenshot created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
 
 components:
   schemas:
@@ -136,9 +339,9 @@ components:
         fileId:
           type: string
         start:
-          type: string
+          type: number
         duration:
-          type: string
+          type: number
         outputFormat:
           type: string
           enum: [mp4, mkv, webm, mov, avi]
@@ -150,7 +353,7 @@ components:
         fileId:
           type: string
         duration:
-          type: string
+          type: number
         outputFormat:
           type: string
           enum: [mp4, mkv, webm, mov, avi]
@@ -175,7 +378,17 @@ components:
           type: string
           enum: [mp3, m4a, aac, flac, wav, opus]
 
-    AddAudioSchema:
+    RemoveAudioSchema:
+      type: object
+      required: [fileId, outputFormat]
+      properties:
+        fileId:
+          type: string
+        outputFormat:
+          type: string
+          enum: [mp4, mkv, webm, mov, avi]
+
+    AddAudioTrackSchema:
       type: object
       required: [videoFileId, audioFileId, outputFormat]
       properties:
@@ -187,18 +400,45 @@ components:
           type: string
           enum: [mp4, mkv, webm, mov, avi]
 
-    ScreenshotSchema:
+    MergeMediaSchema:
       type: object
-      required: [fileId, timestamp]
+      required: [fileIds, outputFormat]
+      properties:
+        fileIds:
+          type: array
+          items:
+            type: string
+          minItems: 2
+        outputFormat:
+          type: string
+
+    ResizeVideoSchema:
+      type: object
+      required: [fileId, width, height, outputFormat]
+      properties:
+        fileId:
+          type: string
+        width:
+          type: integer
+          minimum: 1
+        height:
+          type: integer
+          minimum: 1
+        outputFormat:
+          type: string
+          enum: [mp4, mkv, webm, mov, avi]
+
+    ExtractThumbnailSchema:
+      type: object
+      required: [fileId, timestamp, imageFormat]
       properties:
         fileId:
           type: string
         timestamp:
           type: string
-        outputFormat:
+        imageFormat:
           type: string
-          enum: [jpg, png, webp]
-          default: png
+          enum: [jpg, jpeg, png, webp, gif, avif, svg]
 
     ChainSchema:
       type: object
@@ -215,3 +455,8 @@ components:
               - $ref: '#/components/schemas/CutEndSchema'
               - $ref: '#/components/schemas/ExtractAudioSchema'
               - $ref: '#/components/schemas/TranscodeSchema'
+              - $ref: '#/components/schemas/MergeMediaSchema'
+              - $ref: '#/components/schemas/AddAudioTrackSchema'
+              - $ref: '#/components/schemas/RemoveAudioSchema'
+              - $ref: '#/components/schemas/ResizeVideoSchema'
+              - $ref: '#/components/schemas/ExtractThumbnailSchema'
