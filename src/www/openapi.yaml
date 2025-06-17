@@ -34,6 +34,45 @@ paths:
                   fileId:
                     type: string
 
+  /files:
+    get:
+      summary: Get the all the files information from DB
+      responses:
+        '200':
+          description: Files information retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /files/{fileId}:
+    get:
+      summary: Get the file information from DB
+      parameters:
+        - name: fileId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: File information retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /tasks:
+    get:
+      summary: Get the all the tasks information from DB
+      responses:
+        '200':
+          description: Tasks information retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+
   /meta/{fileId}:
     get:
       summary: Get metadata for a file

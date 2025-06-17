@@ -55,6 +55,7 @@ const CORS_HEADERS = {
 const server = serve({
   routes: {
     "/": docs,
+
     "/openapi.yaml": async () => {
       const file = Bun.file(path.join(import.meta.dir, "www/openapi.yaml"));
       return new Response(file, {
@@ -63,9 +64,11 @@ const server = serve({
         }
       });
     },
+
     "/form": process.env.NODE_ENV === 'dev'
       ? upload
       : Response.redirect("/"),
+
     "/ffmpeg/version": async () => {
       const output = await $`ffmpeg -version`.text();
       const parts = output.split("\n");
@@ -74,6 +77,14 @@ const server = serve({
 
     "/files": async () => {
       const files = await sql`SELECT * FROM files ORDER BY created_at`;
+      return Response.json({ files }, { status: 200 });
+    },
+
+    "/files/:fileId": async (req) => {
+      const fileId = req.params.fileId;
+      if (!fileId) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
+
+      const files = await sql`SELECT * FROM files WHERE id = ${fileId}`;
       return Response.json({ files }, { status: 200 });
     },
 
