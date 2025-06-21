@@ -163,7 +163,7 @@ Content-Type: application/json
 
 {
   "fileId": "string",
-  "format": "mp4" | "mkv" | "webm" | "mov" | "avi"
+  "format": "mp4 | mkv | webm | mov | avi"
 }
 ```
 
@@ -191,7 +191,7 @@ Content-Type: application/json
   "fileId": "string",
   "width": number,
   "height": number,
-  "outputFormat": "mp4" | "mkv" | "webm" | "mov" | "avi"
+  "outputFormat": "mp4 | mkv | webm | mov | avi"
 }
 ```
 
@@ -217,9 +217,9 @@ Content-Type: application/json
 
 {
   "fileId": "string",
-  "start": number,
-  "duration": number,
-  "outputFormat": "mp4" | "mkv" | "webm" | "mov" | "avi"
+  "start": "number",
+  "duration": "number",
+  "outputFormat": "mp4 | mkv | webm | mov | avi"
 }
 ```
 
@@ -245,8 +245,8 @@ Content-Type: application/json
 
 {
   "fileId": "string",
-  "duration": number,
-  "outputFormat": "mp4" | "mkv" | "webm" | "mov" | "avi"
+  "duration": "number",
+  "outputFormat": "mp4 | mkv | webm | mov | avi"
 }
 ```
 
@@ -272,7 +272,7 @@ Content-Type: application/json
 
 {
   "fileId": "string",
-  "audioFormat": "mp3" | "m4a" | "aac" | "flac" | "wav" | "opus"
+  "audioFormat": "mp3 | m4a | aac | flac | wav | opus"
 }
 ```
 
@@ -301,7 +301,7 @@ Content-Type: application/json
 
 {
   "fileId": "string",
-  "outputFormat": "mp4" | "mkv" | "webm" | "mov" | "avi"
+  "outputFormat": "mp4 | mkv | webm | mov | avi"
 }
 ```
 
@@ -328,7 +328,7 @@ Content-Type: application/json
 {
   "videoFileId": "string",
   "audioFileId": "string",
-  "outputFormat": "mp4" | "mkv" | "webm" | "mov" | "avi"
+  "outputFormat": "mp4 | mkv | webm | mov | avi"
 }
 ```
 
@@ -388,7 +388,7 @@ Content-Type: application/json
 {
   "fileId": "string",
   "timestamp": "string",
-  "imageFormat": "jpg" | "jpeg" | "png" | "webp" | "gif" | "avif" | "svg"
+  "imageFormat": "jpg | jpeg | png | webp | gif | avif | svg"
 }
 ```
 
