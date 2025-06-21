@@ -189,8 +189,8 @@ Content-Type: application/json
 
 {
   "fileId": "string",
-  "width": number,
-  "height": number,
+  "width": "number",
+  "height": "number",
   "outputFormat": "mp4 | mkv | webm | mov | avi"
 }
 ```
@@ -417,7 +417,7 @@ Content-Type: application/json
   "fileId": "string",
   "operations": [
     {
-      "type": "transcode" | "resize-video" | "trim" | "trim-end" | "extract-audio" | "merge-media" | "add-audio" | "remove-audio" | "extract-thumbnail",
+      "type": "transcode | resize-video | trim | trim-end | extract-audio | merge-media | add-audio | remove-audio | extract-thumbnail",
       // Operation-specific parameters
     }
   ]

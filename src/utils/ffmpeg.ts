@@ -18,7 +18,7 @@ import type {
   TranscodeType,
   TrimType,
   VideoFormat,
-} from '../schemas.ts';
+} from './schemas.ts';
 
 export async function transcode(args: TranscodeType, task: Task) {
   return handleS3DownAndUpSwap({

@@ -28,12 +28,12 @@ import {
   RemoveAudioSchema,
   ResizeVideoSchema,
   ExtractThumbnailSchema,
-} from './schemas.ts';
+} from './utils/schemas.ts';
 import { startFFQueue } from './utils/queue-ff.ts';
 import { after, startBgQueue } from './utils/queue-bg.ts';
 import { spaces } from './utils/s3.ts';
 import { getFileMetadata, updateFileMetadata } from './utils/ffmpeg.ts';
-import { ALLOWED_MIME_TYPES } from './formats.ts';
+import { ALLOWED_MIME_TYPES } from './utils/formats.ts';
 
 const MAX_FILE_SIZE_UPLOAD = Number(process.env.MAX_FILE_SIZE_UPLOAD);
 

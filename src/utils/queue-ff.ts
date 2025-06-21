@@ -17,7 +17,7 @@ import {
   ExtractThumbnailSchema,
   MergeMediaSchema, RemoveAudioSchema,
   ResizeVideoSchema, TranscodeSchema, TrimSchema,
-} from '../schemas.ts';
+} from './schemas.ts';
 
 const MAX_CONCURRENT_TASKS = Number(process.env.MAX_CONCURRENT_TASKS);
 

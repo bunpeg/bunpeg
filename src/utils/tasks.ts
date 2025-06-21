@@ -1,4 +1,4 @@
-import type { ChainType, Operations } from '../schemas.ts';
+import type { ChainType, Operations } from './schemas.ts';
 import { nanoid } from 'nanoid';
 import { sql } from 'bun';
 import type { UserFile } from './files.ts';
