@@ -66,7 +66,7 @@ export async function handleS3DownAndUpSwap(params: Params) {
           await s3File.delete();
         }
 
-        await createAfterCleanup([...inputPaths, outputPath])();
+        await generateAfterCleanup([...inputPaths, outputPath])();
       });
     },
   );
@@ -99,7 +99,7 @@ export async function handleS3DownAndUpAppend(params: Params) {
         await updateFile(newFileId, { metadata: JSON.stringify(metadata.meta) });
       }
 
-      after(createAfterCleanup([...inputPaths, outputPath]));
+      after(generateAfterCleanup([...inputPaths, outputPath]));
     },
   );
 }
@@ -130,7 +130,7 @@ async function __executeS3DownAndUp(params: Params, cleanup: Params['operation']
     const { error: downloadError } = await tryCatch(downloadFromS3ToDisk(s3Path, localPath));
     if (downloadError) {
       logTask(task.id, `Failed to download file ${s3Path} from S3`);
-      after(createAfterCleanup([...inputPaths, outputPath]));
+      after(generateAfterCleanup([...inputPaths, outputPath]));
       throw downloadError;
     }
 
@@ -140,14 +140,14 @@ async function __executeS3DownAndUp(params: Params, cleanup: Params['operation']
   const { error: operationError } = await tryCatch(operation({ s3Paths, inputPaths, outputPath }));
   if (operationError) {
     logTask(task.id, 'Failed to execute operation');
-    after(createAfterCleanup([...inputPaths, outputPath]));
+    after(generateAfterCleanup([...inputPaths, outputPath]));
     throw operationError;
   }
 
   const { error: uploadError } = await tryCatch(uploadToS3FromDisk(outputPath, outputFile));
   if (uploadError) {
     logTask(task.id, 'Failed to upload from S3');
-    after(createAfterCleanup([...inputPaths, outputPath]));
+    after(generateAfterCleanup([...inputPaths, outputPath]));
     throw uploadError;
   }
 
@@ -170,7 +170,7 @@ function extractFileName(fileName: string) {
   return path.basename(`${TEMP_DIR}/${fileName}`, oldExt);
 }
 
-const createAfterCleanup = (filePaths: string[]) => {
+const generateAfterCleanup = (filePaths: string[]) => {
   return async () => {
     for (const iPath of filePaths) {
       await cleanupFile(iPath);

@@ -256,7 +256,7 @@ const server = serve({
         if (!dbFile) return new Response('Invalid file id', { status: 400, headers: CORS_HEADERS });
 
         const file = spaces.file(dbFile.file_path, { acl: 'public-read' });
-        return new Response(file, { status: 200, headers: CORS_HEADERS });
+        return new Response(file);
       }
     },
 

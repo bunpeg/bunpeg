@@ -194,6 +194,7 @@ export async function getFileMetadata(fileId: UserFile['id']) {
     throw new Error(`S3 File ${file.file_path} not found!`);
   }
 
+  // TODO: use a separate dir to avoid clashes with the upload cleanup function
   const inputPath = path.join(TEMP_DIR, file.file_path);
   await downloadFromS3ToDisk(file.file_path, inputPath);
   const { data, error } = await tryCatch(getLocalFileMetadata(inputPath));
