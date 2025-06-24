@@ -20,6 +20,7 @@ model files {
    * for videos:
    * ```
    * {
+   * size: number;
    * duration: number | null;
    * bitrate: number | null;
    * resolution: {
@@ -31,6 +32,7 @@ model files {
    * for audio:
    * ```
    * {
+   * size: number;
    * duration: number | null;
    * bitrate: number | null;
    * sampleRate: number | null;

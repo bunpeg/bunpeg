@@ -75,22 +75,42 @@ const server = serve({
       return new Response(parts[0]);
     },
 
-    "/files": async () => {
-      const files = await sql`SELECT * FROM files ORDER BY created_at`;
-      return Response.json({ files }, { status: 200 });
+    "/files": {
+      OPTIONS: async () => {
+        return new Response('OK', { headers: CORS_HEADERS });
+      },
+      GET: async () => {
+        const files = await sql`SELECT * FROM files ORDER BY created_at`;
+        return Response.json({ files }, { status: 200, headers: CORS_HEADERS });
+      }
     },
 
-    "/files/:fileId": async (req) => {
-      const fileId = req.params.fileId;
-      if (!fileId) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
+    "/files/:fileId": {
+      OPTIONS: async () => {
+        return new Response('OK', { headers: CORS_HEADERS });
+      },
+      GET: async (req) => {
+        const fileId = req.params.fileId;
+        if (!fileId) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
 
-      const files = await sql`SELECT * FROM files WHERE id = ${fileId}`;
-      return Response.json({ files }, { status: 200 });
+        const [file] = await sql`SELECT * FROM files WHERE id = ${fileId}`;
+
+        if (!file) {
+          return Response.json({ file: null }, { status: 400, headers: CORS_HEADERS });
+        }
+
+        return Response.json({ file: file }, { status: 200, headers: CORS_HEADERS });
+      }
     },
 
-    "/tasks": async () => {
-      const tasks = await sql`SELECT * FROM tasks ORDER BY id`;
-      return Response.json({ tasks }, { status: 200 });
+    "/tasks": {
+      OPTIONS: async () => {
+        return new Response('OK', { headers: CORS_HEADERS });
+      },
+      GET: async () => {
+        const tasks = await sql`SELECT * FROM tasks ORDER BY id`;
+        return Response.json({ tasks }, { status: 200, headers: CORS_HEADERS });
+      }
     },
 
     "/upload": {
@@ -190,58 +210,78 @@ const server = serve({
       }
     },
 
-    "/meta/:fileId": async (req) => {
-      const fileId = req.params.fileId;
-      if (!fileId) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
+    "/meta/:fileId": {
+      OPTIONS: async () => {
+        return new Response('OK', { headers: CORS_HEADERS });
+      },
+      GET: async (req) => {
+        const fileId = req.params.fileId;
+        if (!fileId) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
 
-      const meta = await getFileMetadata(fileId);
-      return Response.json(meta, { status: 200 });
-    },
-
-    "/status/:fileId": async (req) => {
-      const fileId = req.params.fileId;
-      const tasks = await getTasksForFile(fileId);
-
-      if (tasks.length === 0) {
-        return Response.json({ fileId, status: 'not-found' }, { status: 200 });
+        const meta = await getFileMetadata(fileId);
+        return Response.json(meta, { status: 200, headers: CORS_HEADERS });
       }
-
-      // TODO: double check this logic
-      const pendingStatus = ['queued', 'processing'] as Task['status'][];
-      const isPending = tasks.some((task) => pendingStatus.includes(task.status));
-      const lastTask = tasks.at(-1)!;
-
-      return Response.json({ fileId, status: isPending ? 'pending' : lastTask.status },  { status: 200 });
     },
 
-    "/output/:fileId": async (req) => {
-      const fileId = req.params.fileId;
-      if (!fileId) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
+    "/status/:fileId": {
+      OPTIONS: async () => {
+        return new Response('OK', { headers: CORS_HEADERS });
+      },
+      GET:  async (req) => {
+        const fileId = req.params.fileId;
+        const tasks = await getTasksForFile(fileId);
 
-      const dbFile = await getFile(fileId);
-      if (!dbFile) return new Response('Invalid file id', { status: 400, headers: CORS_HEADERS });
+        if (tasks.length === 0) {
+          return Response.json({ fileId, status: 'not-found' }, { status: 200, headers: CORS_HEADERS });
+        }
 
-      const file = spaces.file(dbFile.file_path, { acl: 'public-read' });
-      return new Response(file);
+        // TODO: double check this logic
+        const pendingStatus = ['queued', 'processing'] as Task['status'][];
+        const isPending = tasks.some((task) => pendingStatus.includes(task.status));
+        const lastTask = tasks.at(-1)!;
+
+        return Response.json({ fileId, status: isPending ? 'pending' : lastTask.status },  { status: 200, headers: CORS_HEADERS });
+      },
     },
 
-    "/download/:fileId": async (req) => {
-      const fileId = req.params.fileId;
-      if (!fileId) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
+    "/output/:fileId": {
+      OPTIONS: async () => {
+        return new Response('OK', { headers: CORS_HEADERS });
+      },
+      GET: async (req) => {
+        const fileId = req.params.fileId;
+        if (!fileId) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
 
-      const dbFile = await getFile(fileId);
-      console.log('dbFile', dbFile);
-      if (!dbFile) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
+        const dbFile = await getFile(fileId);
+        if (!dbFile) return new Response('Invalid file id', { status: 400, headers: CORS_HEADERS });
 
-      const file = spaces.file(dbFile.file_path, { acl: 'public-read' });
+        const file = spaces.file(dbFile.file_path, { acl: 'public-read' });
+        return new Response(file, { status: 200, headers: CORS_HEADERS });
+      }
+    },
 
-      after(async () => {
-        await file.delete();
-        await deleteAllTasksForFile(fileId);
-        await deleteFile(fileId);
-      });
+    "/download/:fileId": {
+      OPTIONS: async () => {
+        return new Response('OK', { headers: CORS_HEADERS });
+      },
+      GET: async (req) => {
+        const fileId = req.params.fileId;
+        if (!fileId) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
 
-      return new Response(file);
+        const dbFile = await getFile(fileId);
+        console.log('dbFile', dbFile);
+        if (!dbFile) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
+
+        const file = spaces.file(dbFile.file_path, { acl: 'public-read' });
+
+        after(async () => {
+          await file.delete();
+          await deleteAllTasksForFile(fileId);
+          await deleteFile(fileId);
+        });
+
+        return new Response(file, { status: 200, headers: CORS_HEADERS });
+      }
     },
 
     "/delete/:fileId": {
