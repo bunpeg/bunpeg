@@ -1,7 +1,5 @@
 import { $, serve, sql } from 'bun';
 import path from 'path';
-import fs from 'fs';
-import { rm } from 'node:fs/promises';
 import { nanoid } from 'nanoid';
 import Busboy from 'busboy';
 
@@ -16,31 +14,31 @@ import {
   restoreAllProcessingTasksToQueued,
   type Task,
 } from './utils/tasks.ts';
-import { createFile, deleteFile, getFile, checkFilesExist } from './utils/files.ts';
+import { checkFilesExist, createFile, deleteFile, getFile } from './utils/files.ts';
 import {
+  AddAudioTrackSchema,
   ChainSchema,
   CutEndSchema,
   ExtractAudioSchema,
-  TranscodeSchema,
-  TrimSchema,
+  ExtractThumbnailSchema,
   MergeMediaSchema,
-  AddAudioTrackSchema,
   RemoveAudioSchema,
   ResizeVideoSchema,
-  ExtractThumbnailSchema,
+  TranscodeSchema,
+  TrimSchema,
 } from './utils/schemas.ts';
 import { startFFQueue } from './utils/queue-ff.ts';
 import { after, startBgQueue } from './utils/queue-bg.ts';
 import { spaces } from './utils/s3.ts';
 import { getFileMetadata, updateFileMetadata } from './utils/ffmpeg.ts';
 import { ALLOWED_MIME_TYPES } from './utils/formats.ts';
+import { tryCatch } from './utils/promises.ts';
+import { initDir, META_DIR, TEMP_DIR } from './utils/dirs.ts';
 
 const MAX_FILE_SIZE_UPLOAD = Number(process.env.MAX_FILE_SIZE_UPLOAD);
 
-export const TEMP_DIR = "./data/temp";
-await rm(TEMP_DIR, { force: true, recursive: true });
-fs.mkdirSync(TEMP_DIR, { recursive: true });
-
+await initDir(TEMP_DIR);
+await initDir(META_DIR);
 await restoreAllProcessingTasksToQueued();
 
 startFFQueue();
@@ -99,7 +97,9 @@ const server = serve({
           return Response.json({ file: null }, { status: 400, headers: CORS_HEADERS });
         }
 
-        return Response.json({ file: file }, { status: 200, headers: CORS_HEADERS });
+        return Response.json({
+          file: { ...file, metadata: JSON.parse(file.metadata) },
+        }, { status: 200, headers: CORS_HEADERS });
       }
     },
 
@@ -218,7 +218,11 @@ const server = serve({
         const fileId = req.params.fileId;
         if (!fileId) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
 
-        const meta = await getFileMetadata(fileId);
+        const { data: meta, error } = await tryCatch(getFileMetadata(fileId));
+        if (error) {
+          return new Response("Could not resolve metadata information", { status: 401, headers: CORS_HEADERS });
+        }
+
         return Response.json(meta, { status: 200, headers: CORS_HEADERS });
       }
     },

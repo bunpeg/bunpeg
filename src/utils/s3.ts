@@ -2,7 +2,7 @@ import { S3Client } from 'bun';
 import path from 'path';
 import { logTask, type Task } from './tasks.ts';
 import { createFile, getFile, updateFile, type UserFile } from './files.ts';
-import { TEMP_DIR } from '../index.ts';
+import { TEMP_DIR } from './dirs.ts';
 import { tryCatch } from './promises.ts';
 import { getLocalFileMetadata } from './ffmpeg.ts';
 import { after } from './queue-bg.ts';

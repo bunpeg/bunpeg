@@ -1,7 +1,7 @@
 import { $ } from 'bun';
 import path from 'path';
 import { nanoid } from 'nanoid';
-import { TEMP_DIR } from '../index.ts';
+import { META_DIR } from './dirs.ts';
 import { logTask, markPendingTasksForFileAsUnreachable, type Task, updateTask } from './tasks';
 import { getFile, updateFile, type UserFile } from './files';
 import { cleanupFile, downloadFromS3ToDisk, handleS3DownAndUpAppend, handleS3DownAndUpSwap, spaces } from './s3.ts';
@@ -194,8 +194,10 @@ export async function getFileMetadata(fileId: UserFile['id']) {
     throw new Error(`S3 File ${file.file_path} not found!`);
   }
 
-  // TODO: use a separate dir to avoid clashes with the upload cleanup function
-  const inputPath = path.join(TEMP_DIR, file.file_path);
+  /**
+   * Uses a separate **dir** and an extra **id** to avoid clashes with other async cleanup functions.
+   */
+  const inputPath = path.join(META_DIR, `${nanoid(8)}_${file.file_path}`);
   await downloadFromS3ToDisk(file.file_path, inputPath);
   const { data, error } = await tryCatch(getLocalFileMetadata(inputPath));
   await cleanupFile(inputPath);
@@ -427,7 +429,7 @@ function validateMuxCombination(videoFormat: string, audioFormat: string, output
 }
 
 async function runFFmpeg(args: string[], task: Task) {
-  logOperation( JSON.stringify(["ffmpeg", ...args]));
+  logOperation(JSON.stringify(["ffmpeg", ...args]));
 
   const proc = Bun.spawn(["ffmpeg", ...args], {
     timeout: 1000 * 60 * 15, // 15 minutes
