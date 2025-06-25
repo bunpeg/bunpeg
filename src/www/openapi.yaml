@@ -10,7 +10,8 @@ servers:
 paths:
   /upload:
     post:
-      summary: Upload a media file, currently you can upload video or audio of up to 500MB
+      summary: Upload
+      description: Upload a media file, currently you can upload video or audio of up to 500MB
       requestBody:
         required: true
         content:
@@ -36,7 +37,8 @@ paths:
 
   /files:
     get:
-      summary: Get the all the files information from DB
+      summary: Get files
+      description: Get the all the files information from DB
       responses:
         '200':
           description: Files information retrieved successfully
@@ -47,7 +49,8 @@ paths:
 
   /files/{fileId}:
     get:
-      summary: Get the file information from DB
+      summary: Get file
+      description: Get the file information from DB
       parameters:
         - name: fileId
           in: path
@@ -64,7 +67,8 @@ paths:
 
   /tasks:
     get:
-      summary: Get the all the tasks information from DB
+      summary: Tasks
+      description: Get the all the tasks information from DB
       responses:
         '200':
           description: Tasks information retrieved successfully
@@ -75,7 +79,8 @@ paths:
 
   /meta/{fileId}:
     get:
-      summary: Get metadata for a file
+      summary: Metadata
+      description: Get metadata for a file
       parameters:
         - name: fileId
           in: path
@@ -92,7 +97,8 @@ paths:
 
   /status/{fileId}:
     get:
-      summary: Get processing status for a file
+      summary: Status
+      description: Get processing status for a file
       parameters:
         - name: fileId
           in: path
@@ -115,7 +121,8 @@ paths:
 
   /output/{fileId}:
     get:
-      summary: Get the output file
+      summary: Output
+      description: Get a preview of the file without deleting it
       parameters:
         - name: fileId
           in: path
@@ -133,7 +140,8 @@ paths:
 
   /download/{fileId}:
     get:
-      summary: Download a file and delete it after
+      summary: Download
+      description: Download a file and delete it after
       parameters:
         - name: fileId
           in: path
@@ -151,7 +159,8 @@ paths:
 
   /delete/{fileId}:
     delete:
-      summary: Delete a file and its associated tasks
+      summary: Delete
+      description: Delete a file and its associated tasks
       parameters:
         - name: fileId
           in: path
@@ -171,7 +180,8 @@ paths:
 
   /transcode:
     post:
-      summary: Transcode a video to a different format
+      summary: Transcode
+      description: Transcode a video to a different format
       requestBody:
         required: true
         content:
@@ -191,7 +201,8 @@ paths:
 
   /resize-video:
     post:
-      summary: Resize a video to different dimensions
+      summary: Resize
+      description: Resize a video to different dimensions
       requestBody:
         required: true
         content:
@@ -211,7 +222,8 @@ paths:
 
   /trim:
     post:
-      summary: Trim a video segment
+      summary: Trim
+      description: Trim a video segment
       requestBody:
         required: true
         content:
@@ -231,7 +243,8 @@ paths:
 
   /trim-end:
     post:
-      summary: Cut a segment from the end of a video
+      summary: Trim end
+      description: Cut a segment from the end of a video
       requestBody:
         required: true
         content:
@@ -251,7 +264,8 @@ paths:
 
   /extract-audio:
     post:
-      summary: Extract audio from a video file
+      summary: Extract audio
+      description: Extract audio from a video file
       requestBody:
         required: true
         content:
@@ -271,7 +285,8 @@ paths:
 
   /remove-audio:
     post:
-      summary: Remove audio track from a video
+      summary: Remove audio
+      description: Remove audio track from a video
       requestBody:
         required: true
         content:
@@ -291,7 +306,8 @@ paths:
 
   /add-audio:
     post:
-      summary: Add an audio track to a video
+      summary: Add audio
+      description: Add an audio track to a video
       requestBody:
         required: true
         content:
@@ -311,7 +327,8 @@ paths:
 
   /merge:
     post:
-      summary: Merge multiple media files
+      summary: Merge
+      description: Merge multiple media files
       requestBody:
         required: true
         content:
@@ -331,7 +348,8 @@ paths:
 
   /extract-thumbnail:
     post:
-      summary: Extract a thumbnail from a video
+      summary: Extract thumbnail
+      description: Extract a thumbnail from a video
       requestBody:
         required: true
         content:
@@ -351,7 +369,8 @@ paths:
 
   /chain:
     post:
-      summary: Chain multiple operations on a file
+      summary: Chain
+      description: Chain multiple operations on a file
       requestBody:
         required: true
         content:
@@ -360,7 +379,28 @@ paths:
               $ref: '#/components/schemas/ChainSchema'
       responses:
         '200':
-          description: All operations queued
+          description: A confirmation that the tasks were created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+
+  /bulk:
+    post:
+      summary: Bulk
+      description: Create multiples of the same operation for different files
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkSchema'
+      responses:
+        '200':
+          description: A confirmation that the tasks were created
           content:
             application/json:
               schema:
@@ -371,12 +411,10 @@ paths:
 
 components:
   schemas:
-    TrimSchema:
+    TrimParams:
       type: object
-      required: [fileId, start, duration, outputFormat]
+      required: [start, duration, outputFormat]
       properties:
-        fileId:
-          type: string
         start:
           type: number
         duration:
@@ -385,47 +423,108 @@ components:
           type: string
           enum: [mp4, mkv, webm, mov, avi]
 
-    CutEndSchema:
+    CutEndParams:
       type: object
-      required: [fileId, duration, outputFormat]
+      required: [duration, outputFormat]
       properties:
-        fileId:
-          type: string
         duration:
           type: number
         outputFormat:
           type: string
-          enum: [mp4, mkv, webm, mov, avi]
+          enum: [ mp4, mkv, webm, mov, avi ]
 
-    TranscodeSchema:
+    TranscodeParams:
       type: object
-      required: [fileId, format]
+      required: [format]
       properties:
-        fileId:
-          type: string
         format:
           type: string
-          enum: [mp4, mkv, webm, mov, avi]
+          enum: [ mp4, mkv, webm, mov, avi ]
 
-    ExtractAudioSchema:
+    ExtractAudioParams:
       type: object
-      required: [fileId, audioFormat]
+      required: [audioFormat]
       properties:
-        fileId:
-          type: string
         audioFormat:
           type: string
-          enum: [mp3, m4a, aac, flac, wav, opus]
+          enum: [ mp3, m4a, aac, flac, wav, opus ]
 
-    RemoveAudioSchema:
+    RemoveAudioParams:
       type: object
-      required: [fileId, outputFormat]
+      required: [outputFormat]
       properties:
-        fileId:
+        outputFormat:
           type: string
+          enum: [ mp4, mkv, webm, mov, avi ]
+
+    ResizeVideoParams:
+      type: object
+      required: [width, height, outputFormat]
+      properties:
+        width:
+          type: integer
+          minimum: 1
+        height:
+          type: integer
+          minimum: 1
         outputFormat:
           type: string
           enum: [mp4, mkv, webm, mov, avi]
+
+    ExtractThumbnailParams:
+      type: object
+      required: [ timestamp, imageFormat ]
+      properties:
+        timestamp:
+          type: string
+        imageFormat:
+          type: string
+          enum: [ jpg, jpeg, png, webp, gif, avif, svg ]
+
+    TrimSchema:
+      allOf:
+        - $ref: '#/components/schemas/TrimParams'
+        - type: object
+          required: [ fileId ]
+          properties:
+            fileId:
+              type: string
+
+    CutEndSchema:
+      allOf:
+        - $ref: '#/components/schemas/CutEndParams'
+        - type: object
+          required: [ fileId ]
+          properties:
+            fileId:
+              type: string
+
+    TranscodeSchema:
+      allOf:
+        - $ref: '#/components/schemas/TranscodeParams'
+        - type: object
+          required: [ fileId ]
+          properties:
+            fileId:
+              type: string
+
+    ExtractAudioSchema:
+      allOf:
+        - $ref: '#/components/schemas/ExtractAudioParams'
+        - type: object
+          required: [ fileId ]
+          properties:
+            fileId:
+              type: string
+
+    RemoveAudioSchema:
+      allOf:
+        - $ref: '#/components/schemas/RemoveAudioParams'
+        - type: object
+          required: [ fileId ]
+          properties:
+            fileId:
+              type: string
 
     AddAudioTrackSchema:
       type: object
@@ -452,32 +551,22 @@ components:
           type: string
 
     ResizeVideoSchema:
-      type: object
-      required: [fileId, width, height, outputFormat]
-      properties:
-        fileId:
-          type: string
-        width:
-          type: integer
-          minimum: 1
-        height:
-          type: integer
-          minimum: 1
-        outputFormat:
-          type: string
-          enum: [mp4, mkv, webm, mov, avi]
+      allOf:
+        - $ref: '#/components/schemas/ResizeVideoParams'
+        - type: object
+          required: [ fileId ]
+          properties:
+            fileId:
+              type: string
 
     ExtractThumbnailSchema:
-      type: object
-      required: [fileId, timestamp, imageFormat]
-      properties:
-        fileId:
-          type: string
-        timestamp:
-          type: string
-        imageFormat:
-          type: string
-          enum: [jpg, jpeg, png, webp, gif, avif, svg]
+      allOf:
+        - $ref: '#/components/schemas/ExtractThumbnailParams'
+        - type: object
+          required: [ fileId ]
+          properties:
+            fileId:
+              type: string
 
     ChainSchema:
       type: object
@@ -490,12 +579,29 @@ components:
           minItems: 1
           items:
             oneOf:
-              - $ref: '#/components/schemas/TrimSchema'
-              - $ref: '#/components/schemas/CutEndSchema'
-              - $ref: '#/components/schemas/ExtractAudioSchema'
-              - $ref: '#/components/schemas/TranscodeSchema'
-              - $ref: '#/components/schemas/MergeMediaSchema'
-              - $ref: '#/components/schemas/AddAudioTrackSchema'
-              - $ref: '#/components/schemas/RemoveAudioSchema'
-              - $ref: '#/components/schemas/ResizeVideoSchema'
-              - $ref: '#/components/schemas/ExtractThumbnailSchema'
+              - $ref: '#/components/schemas/TrimParams'
+              - $ref: '#/components/schemas/CutEndParams'
+              - $ref: '#/components/schemas/ExtractAudioParams'
+              - $ref: '#/components/schemas/TranscodeParams'
+              - $ref: '#/components/schemas/RemoveAudioParams'
+              - $ref: '#/components/schemas/ResizeVideoParams'
+              - $ref: '#/components/schemas/ExtractThumbnailParams'
+
+    BulkSchema:
+      type: object
+      required: [fileIds, operation]
+      properties:
+        fileIds:
+          type: array
+          minItems: 1
+          items:
+            type: string
+        operation:
+          oneOf:
+            - $ref: '#/components/schemas/TrimParams'
+            - $ref: '#/components/schemas/CutEndParams'
+            - $ref: '#/components/schemas/ExtractAudioParams'
+            - $ref: '#/components/schemas/TranscodeParams'
+            - $ref: '#/components/schemas/RemoveAudioParams'
+            - $ref: '#/components/schemas/ResizeVideoParams'
+            - $ref: '#/components/schemas/ExtractThumbnailParams'

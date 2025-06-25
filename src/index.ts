@@ -17,6 +17,7 @@ import {
 import { checkFilesExist, createFile, deleteFile, getFile } from './utils/files.ts';
 import {
   AddAudioTrackSchema,
+   BulkSchema,
   ChainSchema,
   CutEndSchema,
   ExtractAudioSchema,
@@ -504,6 +505,33 @@ const server = serve({
         await bulkCreateTasks(operations.map(({ type: operation, ...args }) => ({
           fileId,
           operation,
+          args: { ...args, fileId },
+        })))
+
+        return Response.json({ success: true },  { status: 200, headers: CORS_HEADERS });
+      }
+    },
+
+    "/bulk": {
+      OPTIONS: async () => {
+        return new Response('OK', { headers: CORS_HEADERS });
+      },
+      POST: async (req) => {
+        const parsed = BulkSchema.safeParse(await req.json());
+        if (!parsed.success) {
+          return Response.json(parsed.error, { status: 400, headers: CORS_HEADERS });
+        }
+
+        const { operation, fileIds } = parsed.data;
+        const { type, ...args } = operation;
+
+        if (!(await checkFilesExist(fileIds))) {
+          return new Response(`One or more files not found`, { status: 404, headers: CORS_HEADERS });
+        }
+
+        await bulkCreateTasks(fileIds.map((fileId) => ({
+          fileId,
+          operation: type,
           args: { ...args, fileId },
         })))
 

@@ -42,10 +42,6 @@ export const TranscodeSchema = TranscodeParams.extend({
   fileId,
 });
 
-export const TranscodeSchemaWithType = TranscodeParams.extend({
-  type: z.literal("transcode"),
-});
-
 export type TranscodeType = z.infer<typeof TranscodeSchema>;
 
 const ResizeVideoParams = z.object({
@@ -56,10 +52,6 @@ const ResizeVideoParams = z.object({
 
 export const ResizeVideoSchema = ResizeVideoParams.extend({
   fileId,
-});
-
-export const ResizeVideoSchemaWithType = ResizeVideoParams.extend({
-  type: z.literal('resize-video'),
 });
 
 export type ResizeVideoType = z.infer<typeof ResizeVideoSchema>;
@@ -74,10 +66,6 @@ export const TrimSchema = TrimParams.extend({
   fileId,
 });
 
-export const TrimSchemaWithType = TrimParams.extend({
-  type: z.literal("trim"),
-});
-
 export type TrimType = z.infer<typeof TrimSchema>;
 
 const CutEndParams = z.object({
@@ -87,10 +75,6 @@ const CutEndParams = z.object({
 
 export const CutEndSchema = CutEndParams.extend({
   fileId,
-});
-
-export const CutEndSchemaWithType = CutEndParams.extend({
-  type: z.literal("trim-end"),
 });
 
 export type CutEndType = z.infer<typeof CutEndSchema>;
@@ -103,10 +87,6 @@ export const ExtractAudioSchema = ExtractAudioParams.extend({
   fileId,
 });
 
-export const ExtractAudioSchemaWithType = ExtractAudioParams.extend({
-  type: z.literal("extract-audio"),
-});
-
 export type ExtractAudioType = z.infer<typeof ExtractAudioSchema>;
 
 const RemoveAudioParams = z.object({
@@ -117,10 +97,6 @@ export const RemoveAudioSchema = RemoveAudioParams.extend({
   fileId,
 });
 
-export const RemoveAudioSchemaWithType = RemoveAudioParams.extend({
-  type: z.literal('remove-audio'),
-});
-
 export type RemoveAudioType = z.infer<typeof RemoveAudioSchema>;
 
 export const AddAudioTrackSchema = z.object({
@@ -129,20 +105,12 @@ export const AddAudioTrackSchema = z.object({
   outputFormat: videoFormat,
 });
 
-export const AddAudioTrackSchemaWithType = AddAudioTrackSchema.extend({
-  type: z.literal('add-audio'),
-});
-
 export type AddAudioTrackType = z.infer<typeof AddAudioTrackSchema>;
 
 export const MergeMediaSchema = z.object({
   fileIds: z.array(fileId).min(2, 'At least two files required'),
   // TODO: check if the operation can take video or audio as output, or just video
   outputFormat: z.string().min(1, 'Output format is required'),
-});
-
-export const MergeMediaSchemaWithType = MergeMediaSchema.extend({
-  type: z.literal('merge-media'),
 });
 
 export type MergeMediaType = z.infer<typeof MergeMediaSchema>;
@@ -156,31 +124,43 @@ export const ExtractThumbnailSchema = ExtractThumbnailParams.extend({
   fileId,
 });
 
-export const ExtractThumbnailSchemaWithType = ExtractThumbnailParams.extend({
-  type: z.literal('extract-thumbnail'),
-});
-
 export type ExtractThumbnailType = z.infer<typeof ExtractThumbnailSchema>;
 
-// Union for chained operations
-
-export const OperationSchema = z.union([
-  TrimSchemaWithType,
-  CutEndSchemaWithType,
-  ExtractAudioSchemaWithType,
-  TranscodeSchemaWithType,
-  MergeMediaSchemaWithType,
-  AddAudioTrackSchemaWithType,
-  RemoveAudioSchemaWithType,
-  ResizeVideoSchemaWithType,
-  ExtractThumbnailSchemaWithType,
+// Union for chained operation
+export const ChainOperationSchema = z.union([
+  TrimParams.extend({
+    type: z.literal("trim"),
+  }),
+  CutEndParams.extend({
+    type: z.literal("trim-end"),
+  }),
+  ExtractAudioParams.extend({
+    type: z.literal("extract-audio"),
+  }),
+  TranscodeParams.extend({
+    type: z.literal("transcode"),
+  }),
+  RemoveAudioParams.extend({
+    type: z.literal('remove-audio'),
+  }),
+  ResizeVideoParams.extend({
+    type: z.literal('resize-video'),
+  }),
+  ExtractThumbnailParams.extend({
+    type: z.literal('extract-thumbnail'),
+  }),
 ]);
 
 export const ChainSchema = z.object({
   fileId,
-  operations: z.array(OperationSchema).min(1, "At least one operation is required"),
+  operations: z.array(ChainOperationSchema).min(1, "At least one operation is required"),
 });
-export type ChainType = z.infer<typeof ChainSchema>;
+type ChainType = z.infer<typeof ChainSchema>;
+
+export const BulkSchema = z.object({
+  fileIds: z.array(fileId).min(1, "At least one operation is required"),
+  operation: ChainOperationSchema,
+})
 
 export type Operations =
   | TranscodeType
@@ -192,3 +172,5 @@ export type Operations =
   | RemoveAudioType
   | MergeMediaType
   | ExtractThumbnailType;
+
+export type OperationName = ChainType['operations'][number]['type'] | 'add-audio' | 'merge-media';

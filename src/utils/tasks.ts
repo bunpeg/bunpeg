@@ -1,4 +1,4 @@
-import type { ChainType, Operations } from './schemas.ts';
+import type { OperationName, Operations } from './schemas.ts';
 import { nanoid } from 'nanoid';
 import { sql } from 'bun';
 import type { UserFile } from './files.ts';
@@ -7,7 +7,7 @@ export interface Task {
   id: number;
   code: string;
   file_id: string;
-  operation: ChainType['operations'][number]['type'];
+  operation: OperationName;
   args: string;
   status: 'queued' | 'processing' | 'completed' | 'failed' | 'unreachable';
   pid?: number;
