@@ -234,18 +234,35 @@ const server = serve({
       },
       GET:  async (req) => {
         const fileId = req.params.fileId;
+        if (!fileId) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
+
         const tasks = await getTasksForFile(fileId);
 
         if (tasks.length === 0) {
-          return Response.json({ fileId, status: 'not-found' }, { status: 200, headers: CORS_HEADERS });
+          return Response.json({ fileId, status: 'empty' }, { status: 200, headers: CORS_HEADERS });
         }
 
-        // TODO: double check this logic
         const pendingStatus = ['queued', 'processing'] as Task['status'][];
         const isPending = tasks.some((task) => pendingStatus.includes(task.status));
+
+        if (isPending) {
+          return Response.json({ fileId, status: 'processing' }, { status: 200, headers: CORS_HEADERS });
+        }
+
         const lastTask = tasks.at(-1)!;
 
-        return Response.json({ fileId, status: isPending ? 'pending' : lastTask.status },  { status: 200, headers: CORS_HEADERS });
+        if (lastTask.status === 'completed') {
+          return Response.json({ fileId, status: 'completed' }, { status: 200, headers: CORS_HEADERS });
+        }
+
+        const failedTasks = tasks.filter(t => t.status === 'failed');
+        const lastFailedTask = failedTasks.at(-1)!;
+
+        return Response.json({
+          fileId,
+          status: 'failed',
+          error: lastFailedTask.error ?? null,
+        },  { status: 200, headers: CORS_HEADERS });
       },
     },
 

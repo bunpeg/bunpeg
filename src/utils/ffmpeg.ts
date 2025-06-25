@@ -25,8 +25,16 @@ export async function transcode(args: TranscodeType, task: Task) {
     task,
     fileIds: [args.fileId],
     outputFile: `${task.code}.${args.format}`,
-    operation: ({ inputPaths, outputPath }) => {
-      return runFFmpeg(["-i", inputPaths[0]!, outputPath], task);
+    operation: async ({ inputPaths, outputPath }) => {
+      const inputFile = inputPaths[0]!;
+      const hasVideo = await checkFileHasVideoStream(inputFile);
+
+      if (!hasVideo) {
+        await updateTask(task.id, { status: 'failed', error: 'File has no video track' });
+        throw new Error('File has no video track');
+      }
+
+      return runFFmpeg(["-i", inputFile, outputPath], task);
     },
   });
 }
@@ -36,7 +44,15 @@ export async function resizeVideo(args: ResizeVideoType, task: Task) {
     task,
     fileIds: [args.fileId],
     outputFile: `${task.code}.${args.outputFormat}`,
-    operation: ({ inputPaths, outputPath }) => {
+    operation: async ({ inputPaths, outputPath }) => {
+      const inputFile = inputPaths[0]!;
+      const hasVideo = await checkFileHasVideoStream(inputFile);
+
+      if (!hasVideo) {
+        await updateTask(task.id, { status: 'failed', error: 'File has no video track' });
+        throw new Error('File has no video track');
+      }
+
       return runFFmpeg(['-i', inputPaths[0]!, '-vf', `scale=${args.width}:${args.height}`, outputPath], task);
     },
   });
@@ -78,8 +94,16 @@ export async function extractAudio(args: ExtractAudioType, task: Task) {
     task,
     fileIds: [args.fileId],
     outputFile,
-    operation: ({ inputPaths, outputPath }) => {
-      return runFFmpeg(["-i", inputPaths[0]!, "-vn", ...getAudioCodecs(args.audioFormat), outputPath], task);
+    operation: async ({ inputPaths, outputPath }) => {
+      const inputFile = inputPaths[0]!;
+      const hasAudio = await checkFileHasAudioStream(inputFile);
+
+      if (!hasAudio) {
+        await updateTask(task.id, { status: 'failed', error: 'File has no audio track' });
+        throw new Error('File has no audio track');
+      }
+
+      return runFFmpeg(["-i", inputFile, "-vn", ...getAudioCodecs(args.audioFormat), outputPath], task);
     },
   });
 }
@@ -89,7 +113,17 @@ export async function removeAudio(args: RemoveAudioType, task: Task) {
     task,
     fileIds: [args.fileId],
     outputFile: `${task.code}.${args.outputFormat}`,
-    operation: ({ inputPaths, outputPath }) => runFFmpeg(['-i', inputPaths[0]!, '-an', outputPath], task),
+    operation: async ({ inputPaths, outputPath }) => {
+      const inputFile = inputPaths[0]!;
+      const hasAudio = await checkFileHasAudioStream(inputFile);
+
+      if (!hasAudio) {
+        await updateTask(task.id, { status: 'failed', error: 'File has no audio track' });
+        throw new Error('File has no audio track');
+      }
+
+      return runFFmpeg(['-i', inputPaths[0]!, '-an', outputPath], task);
+    },
   });
 }
 
@@ -166,7 +200,15 @@ export async function extractThumbnail(args: ExtractThumbnailType, task: Task) {
     task,
     fileIds: [args.fileId],
     outputFile: `${nanoid(8)}.${args.imageFormat}`,
-    operation: ({ inputPaths, outputPath }) => {
+    operation: async ({ inputPaths, outputPath }) => {
+      const inputFile = inputPaths[0]!;
+      const hasVideo = await checkFileHasVideoStream(inputFile);
+
+      if (!hasVideo) {
+        await updateTask(task.id, { status: 'failed', error: 'File has no video track' });
+        throw new Error('File has no video track');
+      }
+
       return runFFmpeg([
         '-i', inputPaths[0]!,
         '-ss', args.timestamp,
@@ -337,6 +379,20 @@ async function getImageMetadata(inputPath: string) {
       height: stream?.height ? Number(stream.height) : null,
     },
   };
+}
+
+async function checkFileHasVideoStream(filePath: string) {
+  const result = await $`ffprobe -v quiet -print_format json -show_streams ${filePath}`;
+  const parsed = JSON.parse(result.stdout.toString());
+
+  return (parsed.streams as any[]).some((s: any) => s.codec_type === "video");
+}
+
+async function checkFileHasAudioStream(filePath: string) {
+  const result = await $`ffprobe -v quiet -print_format json -show_streams ${filePath}`;
+  const parsed = JSON.parse(result.stdout.toString());
+
+  return (parsed.streams as any[]).some((s: any) => s.codec_type === "audio");
 }
 
 function getAudioCodecs(format: AudioFormat): string[] {
