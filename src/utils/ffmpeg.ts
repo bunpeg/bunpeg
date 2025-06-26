@@ -2,7 +2,7 @@ import { $ } from 'bun';
 import path from 'path';
 import { nanoid } from 'nanoid';
 import { META_DIR } from './dirs.ts';
-import { logTask, markPendingTasksForFileAsUnreachable, type Task, updateTask } from './tasks';
+import { logTask, type Task, updateTask } from './tasks';
 import { getFile, updateFile, type UserFile } from './files';
 import { cleanupFile, downloadFromS3ToDisk, handleS3DownAndUpAppend, handleS3DownAndUpSwap, spaces } from './s3.ts';
 import { tryCatch } from './promises.ts';
@@ -30,7 +30,6 @@ export async function transcode(args: TranscodeType, task: Task) {
       const hasVideo = await checkFileHasVideoStream(inputFile);
 
       if (!hasVideo) {
-        await updateTask(task.id, { status: 'failed', error: 'File has no video track' });
         throw new Error('File has no video track');
       }
 
@@ -49,7 +48,6 @@ export async function resizeVideo(args: ResizeVideoType, task: Task) {
       const hasVideo = await checkFileHasVideoStream(inputFile);
 
       if (!hasVideo) {
-        await updateTask(task.id, { status: 'failed', error: 'File has no video track' });
         throw new Error('File has no video track');
       }
 
@@ -109,7 +107,6 @@ export async function extractAudio(args: ExtractAudioType, task: Task) {
       const hasAudio = await checkFileHasAudioStream(inputFile);
 
       if (!hasAudio) {
-        await updateTask(task.id, { status: 'failed', error: 'File has no audio track' });
         throw new Error('File has no audio track');
       }
 
@@ -128,7 +125,6 @@ export async function removeAudio(args: RemoveAudioType, task: Task) {
       const hasAudio = await checkFileHasAudioStream(inputFile);
 
       if (!hasAudio) {
-        await updateTask(task.id, { status: 'failed', error: 'File has no audio track' });
         throw new Error('File has no audio track');
       }
 
@@ -215,7 +211,6 @@ export async function extractThumbnail(args: ExtractThumbnailType, task: Task) {
       const hasVideo = await checkFileHasVideoStream(inputFile);
 
       if (!hasVideo) {
-        await updateTask(task.id, { status: 'failed', error: 'File has no video track' });
         throw new Error('File has no video track');
       }
 
@@ -501,19 +496,15 @@ async function runFFmpeg(args: string[], task: Task) {
     timeout: 1000 * 60 * 15, // 15 minutes
   });
 
-  await updateTask(task.id, { status: "processing", pid: proc.pid });
+  await updateTask(task.id, { pid: proc.pid });
   await proc.exited;
 
   if (proc.exitCode !== 0) {
     const error = await new Response(proc.stderr).text();
     logTask(task.id, `ffmpeg finished with exit code ${proc.exitCode} (${proc.signalCode})`);
-    console.log('error', error);
-    await updateTask(task.id, { status: "failed", error });
-    await markPendingTasksForFileAsUnreachable(task.file_id);
     throw new Error(error);
   }
 
-  await updateTask(task.id, { status: 'completed' });
   logTask(task.id, 'ffmpeg finished with exit code 0');
 }
 

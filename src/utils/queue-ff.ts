@@ -70,10 +70,12 @@ async function startTask(task: Task) {
 
   const { error: operationError } = await tryCatch(runOperation(task));
   if (operationError) {
+    await updateTask(task.id, { status: "failed", error: operationError.message });
     await markPendingTasksForFileAsUnreachable(task.file_id);
     logQueueError(`Failed to process task: ${task.id}`, operationError);
   }
 
+  await updateTask(task.id, { status: 'completed' });
   removeTaskFromQueue(task.id);
   removeFileLock(task.file_id);
 

@@ -35,38 +35,34 @@ interface Params {
  * This version is for operations that modify a file (eg: trim, transcode, remove-audio...).
  */
 export async function handleS3DownAndUpSwap(params: Params) {
-  await __executeS3DownAndUp(
-    params,
-    async ({ s3Paths, inputPaths, outputPath  }) => {
-      const { task, outputFile } = params;
+  const { s3Paths, inputPaths, outputPath  } = await __executeS3DownAndUp(params);
+  const { task, outputFile } = params;
 
-      const { data: newFileName, error: fileNameError } = await tryCatch(resolveNewFileName(task.file_id, outputFile));
-      if (fileNameError) {
-        console.error(`Could not resolve new file name for file ${task.file_id} on task ${task.id}`, fileNameError);
-      }
+  const { data: newFileName, error: fileNameError } = await tryCatch(resolveNewFileName(task.file_id, outputFile));
+  if (fileNameError) {
+    console.error(`Could not resolve new file name for file ${task.file_id} on task ${task.id}`, fileNameError);
+  }
 
-      const { data, error: metadataError } = await tryCatch(getLocalFileMetadata(outputPath));
-      if (metadataError) {
-        console.error(`Could not resolve metadata for: ${outputPath}`, metadataError);
-      }
+  const { data, error: metadataError } = await tryCatch(getLocalFileMetadata(outputPath));
+  if (metadataError) {
+    console.error(`Could not resolve metadata for: ${outputPath}`, metadataError);
+  }
 
-      await updateFile(task.file_id, {
-        file_name: newFileName ?? outputFile,
-        file_path: outputFile,
-        ...(data ? {
-          mime_type: data.mimeType,
-          metadata: JSON.stringify(data.meta),
-        } : {})
-      });
+  await updateFile(task.file_id, {
+    file_name: newFileName ?? outputFile,
+    file_path: outputFile,
+    ...(data ? {
+      mime_type: data.mimeType,
+      metadata: JSON.stringify(data.meta),
+    } : {})
+  });
 
-      for (const s3Path of s3Paths) {
-        const s3File = spaces.file(s3Path);
-        await s3File.delete();
-      }
+  for (const s3Path of s3Paths) {
+    const s3File = spaces.file(s3Path);
+    await s3File.delete();
+  }
 
-      await cleanupFiles([...inputPaths, outputPath]);
-    },
-  );
+  await cleanupFiles([...inputPaths, outputPath]);
 }
 
 /**
@@ -75,37 +71,33 @@ export async function handleS3DownAndUpSwap(params: Params) {
  * This version is for operations that create a new file (eg: extract-audio, merge, extract-thumbnail...).
  */
 export async function handleS3DownAndUpAppend(params: Params) {
-  await __executeS3DownAndUp(
-    params,
-    async ({ inputPaths, outputPath }) => {
-      const { task, outputFile } = params;
+  const { inputPaths, outputPath } = await __executeS3DownAndUp(params);
+  const { task, outputFile } = params;
+  const newFileId = extractFileName(outputFile);
+  const newFile = Bun.file(outputFile);
 
-      const newFileId = extractFileName(outputFile);
-      const newFile = Bun.file(outputFile);
-      const { data: newFileName } = await tryCatch(resolveNewFileName(task.file_id, outputFile));
+  const { data: newFileName } = await tryCatch(resolveNewFileName(task.file_id, outputFile));
 
-      await createFile({
-        id: newFileId,
-        file_name: newFileName ?? outputFile,
-        file_path: outputFile,
-        mime_type: newFile.type,
-      });
+  await createFile({
+    id: newFileId,
+    file_name: newFileName ?? outputFile,
+    file_path: outputFile,
+    mime_type: newFile.type,
+  });
 
-      const { data: metadata } = await tryCatch(getLocalFileMetadata(outputPath));
-      if (metadata) {
-        await updateFile(newFileId, { metadata: JSON.stringify(metadata.meta) });
-      }
+  const { data: metadata } = await tryCatch(getLocalFileMetadata(outputPath));
+  if (metadata) {
+    await updateFile(newFileId, { metadata: JSON.stringify(metadata.meta) });
+  }
 
-      await cleanupFiles([...inputPaths, outputPath]);
-    },
-  );
+  await cleanupFiles([...inputPaths, outputPath]);
 }
 
 /**
  * This is the function that actually handles downloading the source file from the S3 client
  * and the subsequent upload, leaving the cleanup to the caller.
  */
-async function __executeS3DownAndUp(params: Params, cleanup: Params['operation']) {
+async function __executeS3DownAndUp(params: Params) {
   const { task, fileIds, outputFile, operation } = params;
 
   const s3Paths: string[] = [];
@@ -148,7 +140,7 @@ async function __executeS3DownAndUp(params: Params, cleanup: Params['operation']
     throw uploadError;
   }
 
-  await cleanup({ s3Paths, inputPaths, outputPath });
+  return { s3Paths, inputPaths, outputPath };
 }
 
 export async function resolveNewFileName(fileId: UserFile['id'], outputFile: string) {
