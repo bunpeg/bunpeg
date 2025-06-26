@@ -19,11 +19,20 @@ export async function getTasksForFile(fileId: UserFile['id']) {
 }
 
 export async function getNextPendingTasks(params: { excludeFileIds: string[], limit: number }) {
-  const fileIdsFilter = params.excludeFileIds.length > 0 ? sql`AND file_id NOT IN ${sql(params.excludeFileIds)}` : sql``;
+  if (params.excludeFileIds.length === 0) {
+    const query = await sql`
+      SELECT *
+      FROM tasks
+      WHERE status = 'queued'
+      ORDER BY id
+      LIMIT ${params.limit}`;
+    return query as Task[];
+  }
+
   const query = await sql`
     SELECT *
     FROM tasks
-    WHERE status = 'queued' ${fileIdsFilter}
+    WHERE status = 'queued' AND file_id NOT IN ${sql(params.excludeFileIds.map((id) => ({ id })), 'id')}
     ORDER BY id
     LIMIT ${params.limit}`;
   return query as Task[];

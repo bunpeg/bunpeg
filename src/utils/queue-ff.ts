@@ -61,8 +61,7 @@ async function startTask(task: Task) {
   logQueueMessage(`Picking up task: ${task.id} to ${task.operation}`);
   const { error: taskError } = await tryCatch(updateTask(task.id, { status: 'processing' }));
   if (taskError) {
-    logQueueMessage(`Failed to update task ${task.id} start processing, skipping cycle...`);
-    console.error(taskError);
+    logQueueError(`Failed to update task ${task.id} start processing, skipping cycle...`, taskError);
     return;
   }
   // Lock task & file
@@ -72,8 +71,7 @@ async function startTask(task: Task) {
   const { error: operationError } = await tryCatch(runOperation(task));
   if (operationError) {
     await markPendingTasksForFileAsUnreachable(task.file_id);
-    logQueueMessage(`Failed to process task: ${task.id}`);
-    console.error(operationError);
+    logQueueError(`Failed to process task: ${task.id}`, operationError);
   }
 
   removeTaskFromQueue(task.id);
@@ -170,5 +168,12 @@ async function runOperation(task: Task) {
 function logQueueMessage(message: string) {
   console.log(`------- FFmpeg queue ------------`);
   console.log(message);
+  console.log(' ');
+}
+
+function logQueueError(message: string, error: Error) {
+  console.log(`------- FFmpeg queue error ------------`);
+  console.log(message);
+  console.error(error);
   console.log(' ');
 }
