@@ -460,12 +460,12 @@ const server = serve({
         if (!parsed.success) {
           return Response.json(parsed.error, { status: 400, headers: CORS_HEADERS });
         }
-        const { videoFileId, audioFileId, outputFormat, mode } = parsed.data;
+        const { videoFileId, audioFileId, outputFormat } = parsed.data;
         // Check both files exist in one query
         if (!(await checkFilesExist([videoFileId, audioFileId]))) {
           return new Response("Video or audio file not found", { status: 404, headers: CORS_HEADERS });
         }
-        await createTask(videoFileId, 'add-audio', { videoFileId, audioFileId, outputFormat, mode });
+        await createTask(videoFileId, 'add-audio', { videoFileId, audioFileId, outputFormat });
         return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS });
       }
     },

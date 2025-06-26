@@ -21,17 +21,16 @@ import type {
 } from './schemas.ts';
 
 export async function transcode(args: TranscodeType, task: Task) {
-  return handleS3DownAndUpSwap({
+  const outputFile = args.mode === 'replace' ? `${task.code}.${args.format}` : `${nanoid(8)}.${args.format}`;
+  const s3Operation = args.mode === 'replace' ? handleS3DownAndUpSwap : handleS3DownAndUpAppend;
+  return s3Operation({
     task,
     fileIds: [args.fileId],
-    outputFile: `${task.code}.${args.format}`,
+    outputFile,
     operation: async ({ inputPaths, outputPath }) => {
       const inputFile = inputPaths[0]!;
       const hasVideo = await checkFileHasVideoStream(inputFile);
-
-      if (!hasVideo) {
-        throw new Error('File has no video track');
-      }
+      if (!hasVideo) throw new Error('File has no video track');
 
       return runFFmpeg(["-i", inputFile, outputPath], task);
     },
@@ -39,17 +38,16 @@ export async function transcode(args: TranscodeType, task: Task) {
 }
 
 export async function resizeVideo(args: ResizeVideoType, task: Task) {
-  return handleS3DownAndUpSwap({
+  const outputFile = args.mode === 'replace' ? `${task.code}.${args.outputFormat}` : `${nanoid(8)}.${args.outputFormat}`;
+  const s3Operation = args.mode === 'replace' ? handleS3DownAndUpSwap : handleS3DownAndUpAppend;
+  return s3Operation({
     task,
     fileIds: [args.fileId],
-    outputFile: `${task.code}.${args.outputFormat}`,
+    outputFile,
     operation: async ({ inputPaths, outputPath }) => {
       const inputFile = inputPaths[0]!;
       const hasVideo = await checkFileHasVideoStream(inputFile);
-
-      if (!hasVideo) {
-        throw new Error('File has no video track');
-      }
+      if (!hasVideo) throw new Error('File has no video track');
 
       return runFFmpeg(['-i', inputPaths[0]!, '-vf', `scale=${args.width}:${args.height}`, outputPath], task);
     },
@@ -57,12 +55,8 @@ export async function resizeVideo(args: ResizeVideoType, task: Task) {
 }
 
 export async function trim(args: TrimType, task: Task) {
-  const outputFile = args.mode === 'replace'
-    ? `${task.code}.${args.outputFormat}`
-    : `${nanoid(8)}.${args.outputFormat}`;
-
+  const outputFile = args.mode === 'replace' ? `${task.code}.${args.outputFormat}` : `${nanoid(8)}.${args.outputFormat}`;
   const s3Operation = args.mode === 'replace' ? handleS3DownAndUpSwap : handleS3DownAndUpAppend;
-
   return s3Operation({
     task,
     fileIds: [args.fileId],
@@ -77,10 +71,12 @@ export async function trim(args: TrimType, task: Task) {
 }
 
 export async function cutEnd(args: CutEndType, task: Task) {
-  return handleS3DownAndUpSwap({
+  const outputFile = args.mode === 'replace' ? `${task.code}.${args.outputFormat}` : `${nanoid(8)}.${args.outputFormat}`;
+  const s3Operation = args.mode === 'replace' ? handleS3DownAndUpSwap : handleS3DownAndUpAppend;
+  return s3Operation({
     task,
     fileIds: [args.fileId],
-    outputFile: `${task.code}.${args.outputFormat}`,
+    outputFile,
     operation: async ({ inputPaths, outputPath }) => {
       const totalDuration = await getVideoDuration(inputPaths[0]!);
       const keepDuration = totalDuration - args.duration;
@@ -92,12 +88,8 @@ export async function cutEnd(args: CutEndType, task: Task) {
 }
 
 export async function extractAudio(args: ExtractAudioType, task: Task) {
-  const outputFile = args.mode === 'replace'
-    ? `${task.code}.${args.audioFormat}`
-    : `${nanoid(8)}.${args.audioFormat}`;
-
+  const outputFile = args.mode === 'replace' ? `${task.code}.${args.audioFormat}` : `${nanoid(8)}.${args.audioFormat}`;
   const s3Operation = args.mode === 'replace' ? handleS3DownAndUpSwap : handleS3DownAndUpAppend;
-
   return s3Operation({
     task,
     fileIds: [args.fileId],
@@ -105,10 +97,7 @@ export async function extractAudio(args: ExtractAudioType, task: Task) {
     operation: async ({ inputPaths, outputPath }) => {
       const inputFile = inputPaths[0]!;
       const hasAudio = await checkFileHasAudioStream(inputFile);
-
-      if (!hasAudio) {
-        throw new Error('File has no audio track');
-      }
+      if (!hasAudio) throw new Error('File has no audio track');
 
       return runFFmpeg(["-i", inputFile, "-vn", ...getAudioCodecs(args.audioFormat), outputPath], task);
     },
@@ -116,17 +105,16 @@ export async function extractAudio(args: ExtractAudioType, task: Task) {
 }
 
 export async function removeAudio(args: RemoveAudioType, task: Task) {
-  return handleS3DownAndUpSwap({
+  const outputFile = args.mode === 'replace' ? `${task.code}.${args.outputFormat}` : `${nanoid(8)}.${args.outputFormat}`;
+  const s3Operation = args.mode === 'replace' ? handleS3DownAndUpSwap : handleS3DownAndUpAppend;
+  return s3Operation({
     task,
     fileIds: [args.fileId],
-    outputFile: `${task.code}.${args.outputFormat}`,
+    outputFile,
     operation: async ({ inputPaths, outputPath }) => {
       const inputFile = inputPaths[0]!;
       const hasAudio = await checkFileHasAudioStream(inputFile);
-
-      if (!hasAudio) {
-        throw new Error('File has no audio track');
-      }
+      if (!hasAudio) throw new Error('File has no audio track');
 
       return runFFmpeg(['-i', inputPaths[0]!, '-an', outputPath], task);
     },
@@ -141,9 +129,19 @@ export async function addAudioTrack(args: AddAudioTrackType, task: Task) {
     operation: async ({ inputPaths, outputPath }) => {
       const videoPath = inputPaths[0]!;
       const audioPath = inputPaths[1]!;
-      const audioCodecArgs = getAudioCodecsForVideo(path.extname(audioPath) as AudioFormat, args.outputFormat);
+      const hasVideo = await checkFileHasVideoStream(videoPath);
+      if (!hasVideo) throw new Error('File has no video track');
 
-      await runFFmpeg(['-i', videoPath, '-i', audioPath, '-c:v', 'copy', ...audioCodecArgs, '-map', '0:v:0', '-map', '1:a:0', '-shortest', outputPath], task);
+      const audioCodecArgs = getAudioCodecsForVideo(path.extname(audioPath) as AudioFormat, args.outputFormat);
+      await runFFmpeg([
+        '-i', videoPath,
+        '-i', audioPath,
+        '-c:v', 'copy',
+        ...audioCodecArgs,
+        '-map', '0:v:0',
+        '-map', '1:a:0',
+        '-shortest', outputPath,
+      ], task);
     },
   })
 }

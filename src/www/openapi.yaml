@@ -558,9 +558,6 @@ components:
         outputFormat:
           type: string
           enum: [mp4, mkv, webm, mov, avi]
-        mode:
-          type: string
-          enum: [ append, replace ]
 
     MergeMediaSchema:
       type: object

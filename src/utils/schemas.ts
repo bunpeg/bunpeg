@@ -90,7 +90,6 @@ export const AddAudioTrackSchema = z.object({
   videoFileId: fileId,
   audioFileId: fileId,
   outputFormat: videoFormat,
-  mode,
 });
 
 export type AddAudioTrackType = z.infer<typeof AddAudioTrackSchema>;
