@@ -1,7 +1,5 @@
 import { z } from "zod";
 
-// Shared param-only schemas for chaining (no 'fileId', no 'type')
-
 export const videoFormat = z.enum([
   "mp4",
   "mkv",
@@ -33,76 +31,66 @@ export const imageFormat = z.enum([
 export type ImageFormat = z.infer<typeof imageFormat>;
 
 const fileId = z.string().min(1, "fileId is required");
+const mode = z.enum(['append', 'replace']).default('replace');
 
 const TranscodeParams = z.object({
   format: videoFormat,
+  mode,
 });
 
-export const TranscodeSchema = TranscodeParams.extend({
-  fileId,
-});
-
+export const TranscodeSchema = TranscodeParams.extend({ fileId });
 export type TranscodeType = z.infer<typeof TranscodeSchema>;
 
 const ResizeVideoParams = z.object({
   width: z.number().int().min(1, 'Width required'),
   height: z.number().int().min(1, 'Height required'),
   outputFormat: videoFormat,
+  mode,
 });
 
-export const ResizeVideoSchema = ResizeVideoParams.extend({
-  fileId,
-});
-
+export const ResizeVideoSchema = ResizeVideoParams.extend({ fileId });
 export type ResizeVideoType = z.infer<typeof ResizeVideoSchema>;
 
 const TrimParams = z.object({
   start: z.number({ required_error: "Start time is required" }),
   duration: z.number({ required_error: "Duration is required" }),
   outputFormat: videoFormat,
+  mode,
 });
 
-export const TrimSchema = TrimParams.extend({
-  fileId,
-});
-
+export const TrimSchema = TrimParams.extend({ fileId });
 export type TrimType = z.infer<typeof TrimSchema>;
 
 const CutEndParams = z.object({
   duration: z.number({ required_error: "Duration is required" }),
   outputFormat: videoFormat,
+  mode,
 });
 
-export const CutEndSchema = CutEndParams.extend({
-  fileId,
-});
-
+export const CutEndSchema = CutEndParams.extend({ fileId });
 export type CutEndType = z.infer<typeof CutEndSchema>;
 
 const ExtractAudioParams = z.object({
   audioFormat: audioFormat,
+  mode,
 });
 
-export const ExtractAudioSchema = ExtractAudioParams.extend({
-  fileId,
-});
-
+export const ExtractAudioSchema = ExtractAudioParams.extend({ fileId });
 export type ExtractAudioType = z.infer<typeof ExtractAudioSchema>;
 
 const RemoveAudioParams = z.object({
   outputFormat: videoFormat,
+  mode,
 })
 
-export const RemoveAudioSchema = RemoveAudioParams.extend({
-  fileId,
-});
-
+export const RemoveAudioSchema = RemoveAudioParams.extend({ fileId });
 export type RemoveAudioType = z.infer<typeof RemoveAudioSchema>;
 
 export const AddAudioTrackSchema = z.object({
   videoFileId: fileId,
   audioFileId: fileId,
   outputFormat: videoFormat,
+  mode,
 });
 
 export type AddAudioTrackType = z.infer<typeof AddAudioTrackSchema>;
@@ -118,37 +106,21 @@ export type MergeMediaType = z.infer<typeof MergeMediaSchema>;
 export const ExtractThumbnailParams = z.object({
   timestamp: z.string().min(1, 'Timestamp required'),
   imageFormat: imageFormat,
+  mode,
 })
 
-export const ExtractThumbnailSchema = ExtractThumbnailParams.extend({
-  fileId,
-});
-
+export const ExtractThumbnailSchema = ExtractThumbnailParams.extend({ fileId });
 export type ExtractThumbnailType = z.infer<typeof ExtractThumbnailSchema>;
 
 // Union for chained operation
 export const ChainOperationSchema = z.union([
-  TrimParams.extend({
-    type: z.literal("trim"),
-  }),
-  CutEndParams.extend({
-    type: z.literal("trim-end"),
-  }),
-  ExtractAudioParams.extend({
-    type: z.literal("extract-audio"),
-  }),
-  TranscodeParams.extend({
-    type: z.literal("transcode"),
-  }),
-  RemoveAudioParams.extend({
-    type: z.literal('remove-audio'),
-  }),
-  ResizeVideoParams.extend({
-    type: z.literal('resize-video'),
-  }),
-  ExtractThumbnailParams.extend({
-    type: z.literal('extract-thumbnail'),
-  }),
+  TrimParams.extend({ type: z.literal("trim") }),
+  CutEndParams.extend({ type: z.literal("trim-end") }),
+  ExtractAudioParams.extend({ type: z.literal("extract-audio") }),
+  TranscodeParams.extend({ type: z.literal("transcode") }),
+  RemoveAudioParams.extend({ type: z.literal('remove-audio') }),
+  ResizeVideoParams.extend({ type: z.literal('resize-video') }),
+  ExtractThumbnailParams.extend({ type: z.literal('extract-thumbnail') }),
 ]);
 
 export const ChainSchema = z.object({

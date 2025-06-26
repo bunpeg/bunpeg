@@ -59,10 +59,16 @@ export async function resizeVideo(args: ResizeVideoType, task: Task) {
 }
 
 export async function trim(args: TrimType, task: Task) {
-  return handleS3DownAndUpSwap({
+  const outputFile = args.mode === 'replace'
+    ? `${task.code}.${args.outputFormat}`
+    : `${nanoid(8)}.${args.outputFormat}`;
+
+  const s3Operation = args.mode === 'replace' ? handleS3DownAndUpSwap : handleS3DownAndUpAppend;
+
+  return s3Operation({
     task,
     fileIds: [args.fileId],
-    outputFile: `${task.code}.${args.outputFormat}`,
+    outputFile,
     operation: ({ inputPaths, outputPath }) => {
       return runFFmpeg(
         ['-i', inputPaths[0]!, '-ss', args.start.toString(), '-t', args.duration.toString(), '-c', 'copy', outputPath],
@@ -88,9 +94,13 @@ export async function cutEnd(args: CutEndType, task: Task) {
 }
 
 export async function extractAudio(args: ExtractAudioType, task: Task) {
-  const newFileId = nanoid(8);
-  const outputFile = `${newFileId}.${args.audioFormat}`;
-  return handleS3DownAndUpAppend({
+  const outputFile = args.mode === 'replace'
+    ? `${task.code}.${args.audioFormat}`
+    : `${nanoid(8)}.${args.audioFormat}`;
+
+  const s3Operation = args.mode === 'replace' ? handleS3DownAndUpSwap : handleS3DownAndUpAppend;
+
+  return s3Operation({
     task,
     fileIds: [args.fileId],
     outputFile,

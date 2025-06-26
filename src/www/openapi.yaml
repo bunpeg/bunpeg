@@ -413,7 +413,7 @@ components:
   schemas:
     TrimParams:
       type: object
-      required: [start, duration, outputFormat]
+      required: [ start, duration, outputFormat ]
       properties:
         start:
           type: number
@@ -421,45 +421,60 @@ components:
           type: number
         outputFormat:
           type: string
-          enum: [mp4, mkv, webm, mov, avi]
+          enum: [ mp4, mkv, webm, mov, avi ]
+        mode:
+          type: string
+          enum: [ append, replace ]
 
     CutEndParams:
       type: object
-      required: [duration, outputFormat]
+      required: [ duration, outputFormat ]
       properties:
         duration:
           type: number
         outputFormat:
           type: string
           enum: [ mp4, mkv, webm, mov, avi ]
+        mode:
+          type: string
+          enum: [ append, replace ]
 
     TranscodeParams:
       type: object
-      required: [format]
+      required: [ format ]
       properties:
         format:
           type: string
           enum: [ mp4, mkv, webm, mov, avi ]
+        mode:
+          type: string
+          enum: [ append, replace ]
 
     ExtractAudioParams:
       type: object
-      required: [audioFormat]
+      required: [ audioFormat ]
       properties:
         audioFormat:
           type: string
           enum: [ mp3, m4a, aac, flac, wav, opus ]
+        mode:
+          type: string
+          enum: [ append, replace ]
 
     RemoveAudioParams:
       type: object
-      required: [outputFormat]
+      required: [ outputFormat ]
       properties:
         outputFormat:
           type: string
           enum: [ mp4, mkv, webm, mov, avi ]
+        mode:
+          type: string
+          enum: [ append, replace ]
 
     ResizeVideoParams:
       type: object
-      required: [width, height, outputFormat]
+      required: [ width, height, outputFormat ]
       properties:
         width:
           type: integer
@@ -470,6 +485,9 @@ components:
         outputFormat:
           type: string
           enum: [mp4, mkv, webm, mov, avi]
+        mode:
+          type: string
+          enum: [ append, replace ]
 
     ExtractThumbnailParams:
       type: object
@@ -480,6 +498,9 @@ components:
         imageFormat:
           type: string
           enum: [ jpg, jpeg, png, webp, gif, avif, svg ]
+        mode:
+          type: string
+          enum: [ append, replace ]
 
     TrimSchema:
       allOf:
@@ -537,6 +558,9 @@ components:
         outputFormat:
           type: string
           enum: [mp4, mkv, webm, mov, avi]
+        mode:
+          type: string
+          enum: [ append, replace ]
 
     MergeMediaSchema:
       type: object
