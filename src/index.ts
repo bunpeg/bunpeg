@@ -17,7 +17,7 @@ import {
 import { checkFilesExist, createFile, deleteFile, getFile } from './utils/files.ts';
 import {
   AddAudioTrackSchema,
-   BulkSchema,
+  BulkSchema,
   ChainSchema,
   CutEndSchema,
   ExtractAudioSchema,
@@ -81,26 +81,6 @@ const server = serve({
       GET: async () => {
         const files = await sql`SELECT * FROM files ORDER BY created_at`;
         return Response.json({ files }, { status: 200, headers: CORS_HEADERS });
-      }
-    },
-
-    "/files/:fileId": {
-      OPTIONS: async () => {
-        return new Response('OK', { headers: CORS_HEADERS });
-      },
-      GET: async (req) => {
-        const fileId = req.params.fileId;
-        if (!fileId) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
-
-        const [file] = await sql`SELECT * FROM files WHERE id = ${fileId}`;
-
-        if (!file) {
-          return Response.json({ file: null }, { status: 400, headers: CORS_HEADERS });
-        }
-
-        return Response.json({
-          file: { ...file, metadata: JSON.parse(file.metadata) },
-        }, { status: 200, headers: CORS_HEADERS });
       }
     },
 
@@ -211,6 +191,42 @@ const server = serve({
       }
     },
 
+    "/files/:fileId": {
+      OPTIONS: async () => {
+        return new Response('OK', { headers: CORS_HEADERS });
+      },
+      GET: async (req) => {
+        const fileId = req.params.fileId;
+        if (!fileId) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
+
+        const [file] = await sql`SELECT * FROM files WHERE id = ${fileId}`;
+
+        if (!file) {
+          return Response.json({ file: null }, { status: 400, headers: CORS_HEADERS });
+        }
+
+        return Response.json({
+          file: { ...file, metadata: JSON.parse(file.metadata) },
+        }, { status: 200, headers: CORS_HEADERS });
+      }
+    },
+
+    "/url/:fileId": {
+      OPTIONS: async () => {
+        return new Response('OK', { headers: CORS_HEADERS });
+      },
+      GET: async (req) => {
+        const fileId = req.params.fileId;
+        if (!fileId) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
+
+        const dbFile = await getFile(fileId);
+        if (!dbFile) return new Response('Invalid file id', { status: 400, headers: CORS_HEADERS });
+
+        const fileUrl = spaces.presign(dbFile.file_path, { acl: 'public-read' });
+        return new Response(fileUrl, { status: 200, headers: CORS_HEADERS });
+      }
+    },
+
     "/meta/:fileId": {
       OPTIONS: async () => {
         return new Response('OK', { headers: CORS_HEADERS });
@@ -232,7 +248,7 @@ const server = serve({
       OPTIONS: async () => {
         return new Response('OK', { headers: CORS_HEADERS });
       },
-      GET:  async (req) => {
+      GET: async (req) => {
         const fileId = req.params.fileId;
         if (!fileId) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
 
@@ -262,7 +278,7 @@ const server = serve({
           fileId,
           status: 'failed',
           error: lastFailedTask.error ?? null,
-        },  { status: 200, headers: CORS_HEADERS });
+        }, { status: 200, headers: CORS_HEADERS });
       },
     },
 
@@ -329,7 +345,7 @@ const server = serve({
       }
     },
 
-    "/transcode":  {
+    "/transcode": {
       OPTIONS: async () => {
         return new Response('OK', { headers: CORS_HEADERS });
       },
@@ -432,7 +448,7 @@ const server = serve({
         }
 
         await createTask(fileId, 'extract-audio', { fileId, audioFormat, mode });
-        return Response.json({ success: true },  { status: 200, headers: CORS_HEADERS });
+        return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS });
       }
     },
 
@@ -525,7 +541,7 @@ const server = serve({
           args: { ...args, fileId },
         })))
 
-        return Response.json({ success: true },  { status: 200, headers: CORS_HEADERS });
+        return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS });
       }
     },
 
@@ -552,7 +568,7 @@ const server = serve({
           args: { fileId, ...args },
         })))
 
-        return Response.json({ success: true },  { status: 200, headers: CORS_HEADERS });
+        return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS });
       }
     },
   },
