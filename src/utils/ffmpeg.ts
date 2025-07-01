@@ -8,6 +8,7 @@ import { cleanupFile, downloadFromS3ToDisk, handleS3DownAndUpAppend, handleS3Dow
 import { tryCatch } from './promises.ts';
 import type {
   AddAudioTrackType,
+  AudioCodec,
   AudioFormat,
   CutEndType,
   ExtractAudioType,
@@ -17,32 +18,40 @@ import type {
   ResizeVideoType,
   TranscodeType,
   TrimType,
+  VideoCodec,
   VideoFormat,
 } from './schemas.ts';
 
-export async function transcode(args: TranscodeType, task: Task) {
+export function transcode(args: TranscodeType, task: Task) {
+  validateMuxCombination(args.format, args.video_codec || null, args.audio_codec || null);
+
   const outputFile = args.mode === 'replace' ? `${task.code}.${args.format}` : `${nanoid(8)}.${args.format}`;
   const s3Operation = args.mode === 'replace' ? handleS3DownAndUpSwap : handleS3DownAndUpAppend;
   return s3Operation({
     task,
-    fileIds: [args.fileId],
+    fileIds: [args.file_id],
     outputFile,
     operation: async ({ inputPaths, outputPath }) => {
       const inputFile = inputPaths[0]!;
       const hasVideo = await checkFileHasVideoStream(inputFile);
       if (!hasVideo) throw new Error('File has no video track');
 
-      return runFFmpeg(["-i", inputFile, outputPath], task);
+      return runFFmpeg([
+        "-i", inputFile,
+        ...(args.video_codec ? ["-c:v", args.video_codec] : []),
+        ...(args.audio_codec ? ["-c:a", args.audio_codec] : []),
+        outputPath,
+      ], task);
     },
   });
 }
 
-export async function resizeVideo(args: ResizeVideoType, task: Task) {
-  const outputFile = args.mode === 'replace' ? `${task.code}.${args.outputFormat}` : `${nanoid(8)}.${args.outputFormat}`;
+export function resizeVideo(args: ResizeVideoType, task: Task) {
+  const outputFile = args.mode === 'replace' ? `${task.code}.${args.output_format}` : `${nanoid(8)}.${args.output_format}`;
   const s3Operation = args.mode === 'replace' ? handleS3DownAndUpSwap : handleS3DownAndUpAppend;
   return s3Operation({
     task,
-    fileIds: [args.fileId],
+    fileIds: [args.file_id],
     outputFile,
     operation: async ({ inputPaths, outputPath }) => {
       const inputFile = inputPaths[0]!;
@@ -54,12 +63,12 @@ export async function resizeVideo(args: ResizeVideoType, task: Task) {
   });
 }
 
-export async function trim(args: TrimType, task: Task) {
-  const outputFile = args.mode === 'replace' ? `${task.code}.${args.outputFormat}` : `${nanoid(8)}.${args.outputFormat}`;
+export function trim(args: TrimType, task: Task) {
+  const outputFile = args.mode === 'replace' ? `${task.code}.${args.output_format}` : `${nanoid(8)}.${args.output_format}`;
   const s3Operation = args.mode === 'replace' ? handleS3DownAndUpSwap : handleS3DownAndUpAppend;
   return s3Operation({
     task,
-    fileIds: [args.fileId],
+    fileIds: [args.file_id],
     outputFile,
     operation: ({ inputPaths, outputPath }) => {
       return runFFmpeg(
@@ -70,12 +79,12 @@ export async function trim(args: TrimType, task: Task) {
   });
 }
 
-export async function cutEnd(args: CutEndType, task: Task) {
-  const outputFile = args.mode === 'replace' ? `${task.code}.${args.outputFormat}` : `${nanoid(8)}.${args.outputFormat}`;
+export function cutEnd(args: CutEndType, task: Task) {
+  const outputFile = args.mode === 'replace' ? `${task.code}.${args.output_format}` : `${nanoid(8)}.${args.output_format}`;
   const s3Operation = args.mode === 'replace' ? handleS3DownAndUpSwap : handleS3DownAndUpAppend;
   return s3Operation({
     task,
-    fileIds: [args.fileId],
+    fileIds: [args.file_id],
     outputFile,
     operation: async ({ inputPaths, outputPath }) => {
       const totalDuration = await getVideoDuration(inputPaths[0]!);
@@ -87,29 +96,29 @@ export async function cutEnd(args: CutEndType, task: Task) {
   });
 }
 
-export async function extractAudio(args: ExtractAudioType, task: Task) {
-  const outputFile = args.mode === 'replace' ? `${task.code}.${args.audioFormat}` : `${nanoid(8)}.${args.audioFormat}`;
+export function extractAudio(args: ExtractAudioType, task: Task) {
+  const outputFile = args.mode === 'replace' ? `${task.code}.${args.audio_format}` : `${nanoid(8)}.${args.audio_format}`;
   const s3Operation = args.mode === 'replace' ? handleS3DownAndUpSwap : handleS3DownAndUpAppend;
   return s3Operation({
     task,
-    fileIds: [args.fileId],
+    fileIds: [args.file_id],
     outputFile,
     operation: async ({ inputPaths, outputPath }) => {
       const inputFile = inputPaths[0]!;
       const hasAudio = await checkFileHasAudioStream(inputFile);
       if (!hasAudio) throw new Error('File has no audio track');
 
-      return runFFmpeg(["-i", inputFile, "-vn", ...getAudioCodecs(args.audioFormat), outputPath], task);
+      return runFFmpeg(["-i", inputFile, "-vn", ...getAudioCodecs(args.audio_format), outputPath], task);
     },
   });
 }
 
-export async function removeAudio(args: RemoveAudioType, task: Task) {
-  const outputFile = args.mode === 'replace' ? `${task.code}.${args.outputFormat}` : `${nanoid(8)}.${args.outputFormat}`;
+export function removeAudio(args: RemoveAudioType, task: Task) {
+  const outputFile = args.mode === 'replace' ? `${task.code}.${args.output_format}` : `${nanoid(8)}.${args.output_format}`;
   const s3Operation = args.mode === 'replace' ? handleS3DownAndUpSwap : handleS3DownAndUpAppend;
   return s3Operation({
     task,
-    fileIds: [args.fileId],
+    fileIds: [args.file_id],
     outputFile,
     operation: async ({ inputPaths, outputPath }) => {
       const inputFile = inputPaths[0]!;
@@ -121,18 +130,18 @@ export async function removeAudio(args: RemoveAudioType, task: Task) {
   });
 }
 
-export async function addAudioTrack(args: AddAudioTrackType, task: Task) {
+export function addAudioTrack(args: AddAudioTrackType, task: Task) {
   return handleS3DownAndUpAppend({
     task,
-    fileIds: [args.videoFileId, args.audioFileId],
-    outputFile: `${nanoid(8)}.${args.outputFormat}`,
+    fileIds: [args.video_file_id, args.audio_file_id],
+    outputFile: `${nanoid(8)}.${args.output_format}`,
     operation: async ({ inputPaths, outputPath }) => {
       const videoPath = inputPaths[0]!;
       const audioPath = inputPaths[1]!;
       const hasVideo = await checkFileHasVideoStream(videoPath);
       if (!hasVideo) throw new Error('File has no video track');
 
-      const audioCodecArgs = getAudioCodecsForVideo(path.extname(audioPath) as AudioFormat, args.outputFormat);
+      const audioCodecArgs = getAudioCodecsForVideo(path.extname(audioPath) as AudioFormat, args.output_format);
       await runFFmpeg([
         '-i', videoPath,
         '-i', audioPath,
@@ -146,11 +155,11 @@ export async function addAudioTrack(args: AddAudioTrackType, task: Task) {
   })
 }
 
-export async function mergeMedia(args: MergeMediaType, task: Task) {
+export function mergeMedia(args: MergeMediaType, task: Task) {
   return handleS3DownAndUpAppend({
     task: task,
-    fileIds: args.fileIds,
-    outputFile: `${nanoid(8)}.${args.outputFormat}`,
+    fileIds: args.file_ids,
+    outputFile: `${nanoid(8)}.${args.output_format}`,
     operation: async ({ inputPaths, outputPath }) => {
       // Step 1: Probe first video for width and height
       const { data: probe, error: probeError } = await tryCatch(getVideoMetadata(inputPaths[0]!));
@@ -202,8 +211,8 @@ export async function mergeMedia(args: MergeMediaType, task: Task) {
 export async function extractThumbnail(args: ExtractThumbnailType, task: Task) {
   return handleS3DownAndUpAppend({
     task,
-    fileIds: [args.fileId],
-    outputFile: `${nanoid(8)}.${args.imageFormat}`,
+    fileIds: [args.file_id],
+    outputFile: `${nanoid(8)}.${args.image_format}`,
     operation: async ({ inputPaths, outputPath }) => {
       const inputFile = inputPaths[0]!;
       const hasVideo = await checkFileHasVideoStream(inputFile);
@@ -446,46 +455,53 @@ function getAudioCodecsForVideo(audioFormat: AudioFormat, outputFormat: VideoFor
   }
 }
 
-function validateMuxCombination(videoFormat: string, audioFormat: string, outputFormat: VideoFormat) {
-  const allowedAudio: Record<VideoFormat, AudioFormat[]> = {
-    mp4: ["aac", "mp3"],
-    mov: ["aac", "wav"],
-    avi: ["mp3", "wav"],
-    mkv: ["aac", "mp3", "m4a", "flac", "wav", "opus"],
-    webm: ["opus"],
-  };
-
-  const allowedVideo: Record<VideoFormat, VideoFormat[]> = {
-    mp4: ["mp4", "mov", "avi"],       // assuming H.264
-    mov: ["mp4", "mov", "avi"],
-    avi: ["mp4", "avi"],
-    mkv: ["mp4", "mkv", "webm", "avi", "mov"],
-    webm: ["webm"],                   // must be VP8/VP9
-  };
-
-  if (!allowedAudio[outputFormat] || !allowedVideo[outputFormat]) {
-    return {
-      valid: false as const,
-      reason: `Unsupported output format: ${outputFormat}`,
-    };
+function validateMuxCombination(
+  outputFormat: VideoFormat | AudioFormat,
+  videoCodec: VideoCodec | null,
+  audioCodec: AudioCodec | null,
+): void {
+  // Common video formats
+  if (outputFormat === "mp4" || outputFormat === "mov") {
+    if (videoCodec && !["h264", "hevc", "mpeg4"].includes(videoCodec)) {
+      throw new Error(`Video codec ${videoCodec} is not typically compatible with ${outputFormat}`);
+    }
+    if (audioCodec && !["aac", "mp3"].includes(audioCodec)) {
+      throw new Error(`Audio codec ${audioCodec} is not typically compatible with ${outputFormat}`);
+    }
+  } else if (outputFormat === "mkv") {
+    // MKV is very flexible, but some common sense checks can still apply
+    if (videoCodec && !["h264", "hevc", "vp9", "av1"].includes(videoCodec)) {
+      console.warn(`Video codec ${videoCodec} is less common with ${outputFormat}, but might work.`);
+    }
+    if (audioCodec && !["aac", "mp3", "ac3", "opus", "flac"].includes(audioCodec)) {
+      console.warn(`Audio codec ${audioCodec} is less common with ${outputFormat}, but might work.`);
+    }
+  } else if (outputFormat === "webm") {
+    if (videoCodec && !["vp8", "vp9", "av1"].includes(videoCodec)) {
+      throw new Error(`Video codec ${videoCodec} is not compatible with ${outputFormat}`);
+    }
+    if (audioCodec && !["opus", "vorbis"].includes(audioCodec)) {
+      throw new Error(`Audio codec ${audioCodec} is not compatible with ${outputFormat}`);
+    }
+  } else if (outputFormat === "avi") {
+    // AVI is older and less flexible
+    if (videoCodec && !["mpeg4", "msmpeg4", "libxvid"].includes(videoCodec)) {
+      throw new Error(`Video codec ${videoCodec} is not typically compatible with ${outputFormat}`);
+    }
+    if (audioCodec && !["mp3", "ac3"].includes(audioCodec)) {
+      throw new Error(`Audio codec ${audioCodec} is not typically compatible with ${outputFormat}`);
+    }
   }
 
-  if (!allowedAudio[outputFormat].includes(audioFormat as AudioFormat)) {
-    return {
-      valid: false as const,
-      reason: `Audio format '${audioFormat}' is not valid for output format '${outputFormat}'`,
-    };
+  // Common audio formats (when videoCodec is null, meaning extracting audio)
+  if (!videoCodec && (outputFormat === "mp3" || outputFormat === "m4a" || outputFormat === "aac" || outputFormat === "flac" || outputFormat === "wav" || outputFormat === "opus")) {
+    if (audioCodec && outputFormat !== audioCodec) {
+      // Basic check: if output is an audio format, audio codec should ideally match or be compatible
+      console.warn(`Output format ${outputFormat} and audio codec ${audioCodec} might not be a direct match.`);
+    }
   }
-
-  if (!allowedVideo[outputFormat].includes(videoFormat as VideoFormat)) {
-    return {
-      valid: false as const,
-      reason: `Video format '${videoFormat}' is not valid for output format '${outputFormat}'`,
-    };
-  }
-
-  return { valid: true as const, reason: undefined };
 }
+
 
 async function runFFmpeg(args: string[], task: Task) {
   logOperation(JSON.stringify(["ffmpeg", ...args]));
@@ -506,7 +522,7 @@ async function runFFmpeg(args: string[], task: Task) {
   logTask(task.id, 'ffmpeg finished with exit code 0');
 }
 
-export function logOperation( message: string) {
+export function logOperation(message: string) {
   console.log(`------- FFmpeg: ------------`);
   console.log(message);
   console.log(' ');

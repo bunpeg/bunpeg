@@ -356,14 +356,14 @@ const server = serve({
           return Response.json(parsed.error, { status: 400, headers: CORS_HEADERS });
         }
 
-        const { fileId, format, mode } = parsed.data;
-        const file = await getFile(fileId);
+        const { file_id } = parsed.data;
+        const file = await getFile(file_id);
 
         if (!file || !(await spaces.file(file.file_path).exists())) {
           return new Response("File not found", { status: 404, headers: CORS_HEADERS });
         }
 
-        await createTask(fileId, 'transcode', { fileId, format, mode });
+        await createTask(file_id, 'transcode', parsed.data);
         return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS });
       }
     },
@@ -375,11 +375,14 @@ const server = serve({
         if (!parsed.success) {
           return Response.json(parsed.error, { status: 400, headers: CORS_HEADERS });
         }
-        const { fileId, width, height, outputFormat, mode } = parsed.data;
-        if (!(await checkFilesExist([fileId]))) {
+        const { file_id } = parsed.data;
+
+        const userFile = await getFile(file_id);
+        if (!userFile || !(await spaces.file(userFile.file_path).exists())) {
           return new Response("File not found", { status: 404, headers: CORS_HEADERS });
         }
-        await createTask(fileId, 'resize-video', { fileId, width, height, outputFormat, mode });
+
+        await createTask(file_id, 'resize-video', parsed.data);
         return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS });
       }
     },
@@ -395,14 +398,14 @@ const server = serve({
           return Response.json(parsed.error, { status: 400, headers: CORS_HEADERS });
         }
 
-        const { fileId, start, duration, outputFormat, mode } = parsed.data;
+        const { file_id } = parsed.data;
 
-        const userFile = await getFile(fileId);
+        const userFile = await getFile(file_id);
         if (!userFile || !(await spaces.file(userFile.file_path).exists())) {
           return new Response("File not found", { status: 404, headers: CORS_HEADERS });
         }
 
-        await createTask(fileId, 'trim', { fileId, start, duration, outputFormat, mode });
+        await createTask(file_id, 'trim', parsed.data);
         return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS });
       }
     },
@@ -417,15 +420,14 @@ const server = serve({
           return Response.json(parsed.error, { status: 400, headers: CORS_HEADERS });
         }
 
-        const { fileId, duration, outputFormat, mode } = parsed.data;
-
-        const userFile = await getFile(fileId);
+        const { file_id } = parsed.data;
+        const userFile = await getFile(file_id);
 
         if (!userFile || !(await spaces.file(userFile.file_path).exists())) {
           return new Response('File not found', { status: 400, headers: CORS_HEADERS });
         }
 
-        await createTask(fileId, 'trim-end', { fileId, duration, outputFormat, mode });
+        await createTask(file_id, 'trim-end', parsed.data);
         return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS });
       }
     },
@@ -440,14 +442,14 @@ const server = serve({
           return Response.json(parsed.error, { status: 400, headers: CORS_HEADERS });
         }
 
-        const { fileId, audioFormat, mode } = parsed.data;
-        const userFile = await getFile(fileId);
+        const { file_id } = parsed.data;
+        const userFile = await getFile(file_id);
 
         if (!userFile || !(await spaces.file(userFile.file_path).exists())) {
           return new Response("File not found", { status: 404, headers: CORS_HEADERS });
         }
 
-        await createTask(fileId, 'extract-audio', { fileId, audioFormat, mode });
+        await createTask(file_id, 'extract-audio', parsed.data);
         return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS });
       }
     },
@@ -459,12 +461,12 @@ const server = serve({
         if (!parsed.success) {
           return Response.json(parsed.error, { status: 400, headers: CORS_HEADERS });
         }
-        const { fileId, outputFormat, mode } = parsed.data;
-        if (!(await checkFilesExist([fileId]))) {
+        const { file_id } = parsed.data;
+        if (!(await checkFilesExist([file_id]))) {
           return new Response("File not found", { status: 404, headers: CORS_HEADERS });
         }
 
-        await createTask(fileId, 'remove-audio', { fileId, outputFormat, mode });
+        await createTask(file_id, 'remove-audio', parsed.data);
         return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS });
       }
     },
@@ -476,12 +478,12 @@ const server = serve({
         if (!parsed.success) {
           return Response.json(parsed.error, { status: 400, headers: CORS_HEADERS });
         }
-        const { videoFileId, audioFileId, outputFormat } = parsed.data;
+        const { video_file_id, audio_file_id } = parsed.data;
         // Check both files exist in one query
-        if (!(await checkFilesExist([videoFileId, audioFileId]))) {
+        if (!(await checkFilesExist([video_file_id, audio_file_id]))) {
           return new Response("Video or audio file not found", { status: 404, headers: CORS_HEADERS });
         }
-        await createTask(videoFileId, 'add-audio', { videoFileId, audioFileId, outputFormat });
+        await createTask(video_file_id, 'add-audio', parsed.data);
         return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS });
       }
     },
@@ -493,12 +495,12 @@ const server = serve({
         if (!parsed.success) {
           return Response.json(parsed.error, { status: 400, headers: CORS_HEADERS });
         }
-        const { fileIds, outputFormat } = parsed.data;
+        const { file_ids } = parsed.data;
         // Check all files exist in one query
-        if (!(await checkFilesExist(fileIds))) {
+        if (!(await checkFilesExist(file_ids))) {
           return new Response(`One or more files not found`, { status: 404, headers: CORS_HEADERS });
         }
-        await createTask(fileIds[0]!, 'merge-media', { fileIds, outputFormat });
+        await createTask(file_ids[0]!, 'merge-media', parsed.data);
         return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS });
       }
     },
@@ -510,11 +512,15 @@ const server = serve({
         if (!parsed.success) {
           return Response.json(parsed.error, { status: 400, headers: CORS_HEADERS });
         }
-        const { fileId, timestamp, imageFormat, mode } = parsed.data;
-        if (!(await checkFilesExist([fileId]))) {
+
+        const { file_id } = parsed.data;
+        const userFile = await getFile(file_id);
+
+        if (!userFile || !(await spaces.file(userFile.file_path).exists())) {
           return new Response("File not found", { status: 404, headers: CORS_HEADERS });
         }
-        await createTask(fileId, 'extract-thumbnail', { fileId, timestamp, imageFormat, mode });
+
+        await createTask(file_id, 'extract-thumbnail', parsed.data);
         return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS });
       }
     },
@@ -529,16 +535,16 @@ const server = serve({
           return Response.json(parsed.error, { status: 400, headers: CORS_HEADERS });
         }
 
-        const { fileId, operations } = parsed.data;
-        const userFile = await getFile(fileId);
+        const { file_id, operations } = parsed.data;
+        const userFile = await getFile(file_id);
         if (!userFile || !(await spaces.file(userFile.file_path).exists())) {
           return new Response("File not found", { status: 404, headers: CORS_HEADERS });
         }
 
         await bulkCreateTasks(operations.map(({ type: operation, ...args }) => ({
-          fileId,
+          fileId: file_id,
           operation,
-          args: { ...args, fileId },
+          args: { ...args, file_id },
         })))
 
         return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS });
@@ -555,17 +561,17 @@ const server = serve({
           return Response.json(parsed.error, { status: 400, headers: CORS_HEADERS });
         }
 
-        const { operation, fileIds } = parsed.data;
+        const { operation, file_ids } = parsed.data;
         const { type, ...args } = operation;
 
-        if (!(await checkFilesExist(fileIds))) {
+        if (!(await checkFilesExist(file_ids))) {
           return new Response(`One or more files not found`, { status: 404, headers: CORS_HEADERS });
         }
 
-        await bulkCreateTasks(fileIds.map((fileId) => ({
+        await bulkCreateTasks(file_ids.map((fileId) => ({
           fileId,
           operation: type,
-          args: { fileId, ...args },
+          args: { file_id: fileId, ...args },
         })))
 
         return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS });
