@@ -73,9 +73,10 @@ async function startTask(task: Task) {
     await updateTask(task.id, { status: "failed", error: operationError.message });
     await markPendingTasksForFileAsUnreachable(task.file_id);
     logQueueError(`Failed to process task: ${task.id}`, operationError);
+  } else {
+    await updateTask(task.id, { status: 'completed' });
   }
 
-  await updateTask(task.id, { status: 'completed' });
   removeTaskFromQueue(task.id);
   removeFileLock(task.file_id);
 
@@ -118,7 +119,7 @@ async function runOperation(task: Task) {
       if (!parsed.success) throw new Error(`Invalid trim args: ${JSON.stringify(parsed.error.issues)}`);
       const args = parsed.data;
       await trim(args, task);
-    }  break;
+    } break;
 
     case 'trim-end': {
       const parsed = CutEndSchema.safeParse(JSON.parse(jsonArgs));
