@@ -6,6 +6,7 @@ import {
   cutEnd,
   extractAudio,
   extractThumbnail,
+  generateDashFiles,
   mergeMedia,
   removeAudio,
   resizeVideo,
@@ -13,7 +14,7 @@ import {
   trim,
 } from './ffmpeg.ts';
 import {
-  AddAudioTrackSchema, CutEndSchema, ExtractAudioSchema,
+  AddAudioTrackSchema, CutEndSchema, DashSchema, ExtractAudioSchema,
   ExtractThumbnailSchema,
   MergeMediaSchema, RemoveAudioSchema,
   ResizeVideoSchema, TranscodeSchema, TrimSchema,
@@ -161,6 +162,13 @@ async function runOperation(task: Task) {
       if (!parsed.success) throw new Error(`Invalid merge-media args: ${JSON.stringify(parsed.error.issues)}`);
       const args = parsed.data;
       await mergeMedia(args, task);
+    } break;
+
+    case 'dash': {
+      const parsed = DashSchema.safeParse(JSON.parse(jsonArgs));
+      if (!parsed.success) throw new Error(`Invalid merge-media args: ${JSON.stringify(parsed.error.issues)}`);
+      const args = parsed.data;
+      await generateDashFiles(args, task);
     } break;
 
     default:

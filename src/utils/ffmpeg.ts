@@ -1,16 +1,18 @@
 import { $ } from 'bun';
 import path from 'path';
+import { rm, mkdir, readdir } from 'node:fs/promises';
 import { nanoid } from 'nanoid';
-import { META_DIR } from './dirs.ts';
+import { META_DIR, TEMP_DIR } from './dirs.ts';
 import { logTask, type Task, updateTask } from './tasks';
 import { getFile, updateFile, type UserFile } from './files';
-import { cleanupFile, downloadFromS3ToDisk, handleS3DownAndUpAppend, handleS3DownAndUpSwap, spaces } from './s3.ts';
+import { cleanupFile, cleanupFiles, downloadFromS3ToDisk, handleS3DownAndUpAppend, handleS3DownAndUpSwap, spaces, uploadToS3FromDisk } from './s3.ts';
 import { tryCatch } from './promises.ts';
 import type {
   AddAudioTrackType,
   AudioCodec,
   AudioFormat,
   CutEndType,
+  DashType,
   ExtractAudioType,
   ExtractThumbnailType,
   MergeMediaType,
@@ -231,6 +233,78 @@ export async function extractThumbnail(args: ExtractThumbnailType, task: Task) {
       ], task);
     },
   });
+}
+
+export async function generateDashFiles(args: DashType, task: Task) {
+  const { data: file, error } = await tryCatch(getFile(task.file_id));
+  if (error || !file) {
+    throw new Error(`Could not find file ${task.file_id}`);
+  }
+
+  const localPath = path.join(TEMP_DIR, file.file_path);
+  const { error: downloadError } = await tryCatch(downloadFromS3ToDisk(file.file_path, localPath));
+  if (downloadError) {
+    logTask(task.id, `Failed to download file ${file.file_path} from S3`);
+    await cleanupFile(localPath);
+    throw downloadError;
+  }
+
+  const hasVideo = await checkFileHasVideoStream(localPath);
+  if (!hasVideo) throw new Error('File has no video track');
+
+  const ext = path.extname(file.file_name);
+  const encodedPath = path.join(TEMP_DIR, `${task.code}${ext}`);
+
+  const { error: ffError } = await tryCatch(
+    runFFmpeg([
+      '-i', localPath,
+      '-c:v', 'libx264',
+      '-c:a', 'aac',
+      '-preset', 'fast',
+      '-crf', '23',
+      '-movflags', '+faststart',
+      encodedPath,
+    ], task)
+  );
+  if (ffError) {
+    await cleanupFiles([localPath, encodedPath]);
+    throw ffError;
+  }
+
+  const segmentsPath = path.join(TEMP_DIR, `${task.code}/dash`);
+  await mkdir(segmentsPath, { recursive: true });
+  const manifestoPath = path.join(segmentsPath, 'manifesto.mpd');
+
+  const { error: mpError } = await tryCatch(
+    runMp4box([
+      '-dash', '4000',
+      '-frag', '4000',
+      '-profile', 'dashavc264:live',
+      '-out', manifestoPath,
+      encodedPath,
+    ], task)
+  );
+  if (mpError) {
+    await cleanupFiles([manifestoPath, encodedPath, localPath]);
+    await rm(segmentsPath, { force: true, recursive: true });
+    throw mpError;
+  }
+
+  const segmentedFiles = await readdir(segmentsPath, { withFileTypes: true });
+  for (const seg of segmentedFiles) {
+    if (seg.isDirectory()) continue;
+
+    const segFilePath = path.join(seg.parentPath, seg.name);
+    const { error: uploadError } = await tryCatch(uploadToS3FromDisk(segFilePath, `${task.code}/dash/${seg.name}`));
+    if (uploadError) {
+      await rm(segmentsPath, { force: true, recursive: true });
+      throw new Error(`Failed to upload DASH segments for task ${task.id}`);
+    }
+  }
+
+  if (await Bun.file(segmentsPath).exists()) {
+    await rm(segmentsPath, { force: true, recursive: true });
+  }
 }
 
 export async function updateFileMetadata(fileId: UserFile['id']) {
@@ -520,6 +594,25 @@ async function runFFmpeg(args: string[], task: Task) {
   }
 
   logTask(task.id, 'ffmpeg finished with exit code 0');
+}
+
+async function runMp4box(args: string[], task: Task) {
+  logOperation(JSON.stringify(["mp4box", ...args]));
+
+  const proc = Bun.spawn(["mp4box", ...args], {
+    timeout: 1000 * 60 * 15, // 15 minutes
+  });
+
+  await updateTask(task.id, { pid: proc.pid });
+  await proc.exited;
+
+  if (proc.exitCode !== 0) {
+    const error = await new Response(proc.stderr).text();
+    logTask(task.id, `mp4box finished with exit code ${proc.exitCode} (${proc.signalCode})`);
+    throw new Error(error);
+  }
+
+  logTask(task.id, 'mp4box finished with exit code 0');
 }
 
 export function logOperation(message: string) {

@@ -56,7 +56,6 @@ const TranscodeParams = z.object({
   audio_codec: audioCodec.optional(),
   mode,
 });
-
 export const TranscodeSchema = TranscodeParams.extend({ file_id: fileId });
 export type TranscodeType = z.infer<typeof TranscodeSchema>;
 
@@ -66,7 +65,6 @@ const ResizeVideoParams = z.object({
   output_format: videoFormat,
   mode,
 });
-
 export const ResizeVideoSchema = ResizeVideoParams.extend({ file_id: fileId });
 export type ResizeVideoType = z.infer<typeof ResizeVideoSchema>;
 
@@ -76,7 +74,6 @@ const TrimParams = z.object({
   output_format: videoFormat,
   mode,
 });
-
 export const TrimSchema = TrimParams.extend({ file_id: fileId });
 export type TrimType = z.infer<typeof TrimSchema>;
 
@@ -85,7 +82,6 @@ const CutEndParams = z.object({
   output_format: videoFormat,
   mode,
 });
-
 export const CutEndSchema = CutEndParams.extend({ file_id: fileId });
 export type CutEndType = z.infer<typeof CutEndSchema>;
 
@@ -94,7 +90,6 @@ const ExtractAudioParams = z.object({
   audio_codec: audioCodec.optional(),
   mode,
 });
-
 export const ExtractAudioSchema = ExtractAudioParams.extend({ file_id: fileId });
 export type ExtractAudioType = z.infer<typeof ExtractAudioSchema>;
 
@@ -102,7 +97,6 @@ const RemoveAudioParams = z.object({
   output_format: videoFormat,
   mode,
 })
-
 export const RemoveAudioSchema = RemoveAudioParams.extend({ file_id: fileId });
 export type RemoveAudioType = z.infer<typeof RemoveAudioSchema>;
 
@@ -113,7 +107,6 @@ export const AddAudioTrackSchema = z.object({
   video_codec: videoCodec.optional(),
   audio_codec: audioCodec.optional(),
 });
-
 export type AddAudioTrackType = z.infer<typeof AddAudioTrackSchema>;
 
 export const MergeMediaSchema = z.object({
@@ -121,7 +114,6 @@ export const MergeMediaSchema = z.object({
   // TODO: check if the operation can take video or audio as output, or just video
   output_format: z.string().min(1, 'Output format is required'),
 });
-
 export type MergeMediaType = z.infer<typeof MergeMediaSchema>;
 
 export const ExtractThumbnailParams = z.object({
@@ -129,7 +121,6 @@ export const ExtractThumbnailParams = z.object({
   image_format: imageFormat,
   mode,
 })
-
 export const ExtractThumbnailSchema = ExtractThumbnailParams.extend({ file_id: fileId });
 export type ExtractThumbnailType = z.infer<typeof ExtractThumbnailSchema>;
 
@@ -155,6 +146,9 @@ export const BulkSchema = z.object({
   operation: ChainOperationSchema,
 })
 
+export const DashSchema = z.object({ file_id: fileId });
+export type DashType = z.infer<typeof DashSchema>;
+
 export type Operations =
   | TranscodeType
   | ResizeVideoType
@@ -164,6 +158,7 @@ export type Operations =
   | AddAudioTrackType
   | RemoveAudioType
   | MergeMediaType
-  | ExtractThumbnailType;
+  | ExtractThumbnailType
+  | DashType;
 
-export type OperationName = ChainType['operations'][number]['type'] | 'add-audio' | 'merge-media';
+export type OperationName = ChainType['operations'][number]['type'] | 'add-audio' | 'merge-media' | 'dash';

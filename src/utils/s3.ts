@@ -35,7 +35,7 @@ interface Params {
  * This version is for operations that modify a file (eg: trim, transcode, remove-audio...).
  */
 export async function handleS3DownAndUpSwap(params: Params) {
-  const { s3Paths, inputPaths, outputPath  } = await __executeS3DownAndUp(params);
+  const { s3Paths, inputPaths, outputPath } = await __executeS3DownAndUp(params);
   const { task, outputFile } = params;
 
   const { data: newFileName, error: fileNameError } = await tryCatch(resolveNewFileName(task.file_id, outputFile));
@@ -159,7 +159,7 @@ function extractFileName(fileName: string) {
   return path.basename(`${TEMP_DIR}/${fileName}`, oldExt);
 }
 
-async function cleanupFiles(filePaths: string[]) {
+export async function cleanupFiles(filePaths: string[]) {
   for (const iPath of filePaths) {
     await cleanupFile(iPath);
   }

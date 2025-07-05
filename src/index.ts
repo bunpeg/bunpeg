@@ -191,12 +191,12 @@ const server = serve({
       }
     },
 
-    "/files/:fileId": {
+    "/files/:file_id": {
       OPTIONS: async () => {
         return new Response('OK', { headers: CORS_HEADERS });
       },
       GET: async (req) => {
-        const fileId = req.params.fileId;
+        const fileId = req.params.file_id;
         if (!fileId) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
 
         const [file] = await sql`SELECT * FROM files WHERE id = ${fileId}`;
@@ -211,12 +211,12 @@ const server = serve({
       }
     },
 
-    "/url/:fileId": {
+    "/url/:file_id": {
       OPTIONS: async () => {
         return new Response('OK', { headers: CORS_HEADERS });
       },
       GET: async (req) => {
-        const fileId = req.params.fileId;
+        const fileId = req.params.file_id;
         if (!fileId) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
 
         const dbFile = await getFile(fileId);
@@ -227,12 +227,12 @@ const server = serve({
       }
     },
 
-    "/meta/:fileId": {
+    "/meta/:file_id": {
       OPTIONS: async () => {
         return new Response('OK', { headers: CORS_HEADERS });
       },
       GET: async (req) => {
-        const fileId = req.params.fileId;
+        const fileId = req.params.file_id;
         if (!fileId) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
 
         const { data: meta, error } = await tryCatch(getFileMetadata(fileId));
@@ -244,12 +244,12 @@ const server = serve({
       }
     },
 
-    "/status/:fileId": {
+    "/status/:file_id": {
       OPTIONS: async () => {
         return new Response('OK', { headers: CORS_HEADERS });
       },
       GET: async (req) => {
-        const fileId = req.params.fileId;
+        const fileId = req.params.file_id;
         if (!fileId) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
 
         const tasks = await getTasksForFile(fileId);
@@ -282,12 +282,12 @@ const server = serve({
       },
     },
 
-    "/output/:fileId": {
+    "/output/:file_id": {
       OPTIONS: async () => {
         return new Response('OK', { headers: CORS_HEADERS });
       },
       GET: async (req) => {
-        const fileId = req.params.fileId;
+        const fileId = req.params.file_id;
         if (!fileId) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
 
         const dbFile = await getFile(fileId);
@@ -298,12 +298,12 @@ const server = serve({
       }
     },
 
-    "/download/:fileId": {
+    "/download/:file_id": {
       OPTIONS: async () => {
         return new Response('OK', { headers: CORS_HEADERS });
       },
       GET: async (req) => {
-        const fileId = req.params.fileId;
+        const fileId = req.params.file_id;
         if (!fileId) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
 
         const dbFile = await getFile(fileId);
@@ -322,12 +322,12 @@ const server = serve({
       }
     },
 
-    "/delete/:fileId": {
+    "/delete/:file_id": {
       OPTIONS: async () => {
         return new Response('OK', { headers: CORS_HEADERS });
       },
       DELETE: async (req) => {
-        const fileId = req.params.fileId;
+        const fileId = req.params.file_id;
         if (!fileId) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
 
         const dbFile = await getFile(fileId);
@@ -576,6 +576,22 @@ const server = serve({
 
         return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS });
       }
+    },
+
+    "/dash/:file_id/process": {
+      OPTIONS: async () => {
+        return new Response('OK', { headers: CORS_HEADERS });
+      },
+      GET: async (req) => {
+        const fileId = req.params.file_id;
+        if (!fileId) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
+
+        const dbFile = await getFile(fileId);
+        if (!dbFile) return new Response('Invalid file id', { status: 400, headers: CORS_HEADERS });
+
+        await createTask(fileId, 'dash', { file_id: fileId });
+        return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS })
+      },
     },
   },
   fetch() {
