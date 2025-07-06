@@ -18,8 +18,8 @@ export async function downloadFromS3ToDisk(s3Path: string, localPath: string) {
   await Bun.write(localPath, spaces.file(s3Path));
 }
 
-export async function uploadToS3FromDisk(localPath: string, s3Path: string) {
-  await spaces.write(s3Path, Bun.file(localPath));
+export async function uploadToS3FromDisk(localPath: string, s3Path: string, options?: Bun.S3Options) {
+  await spaces.write(s3Path, Bun.file(localPath), options);
 }
 
 interface Params {

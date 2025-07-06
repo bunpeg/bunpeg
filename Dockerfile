@@ -3,10 +3,10 @@ FROM oven/bun:1.2.15
 
 # Install ffmpeg
 RUN apt-get update && \
-    apt-get install -y ffmpeg && \
-    apt-get install -y gpac && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+  apt-get install -y ffmpeg && \
+  apt-get install -y gpac && \
+  apt-get clean && \
+  rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app

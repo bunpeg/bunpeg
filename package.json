@@ -13,13 +13,13 @@
   "devDependencies": {
     "@types/bun": "1.2.15",
     "@types/busboy": "1.5.4",
-    "prisma": "6.9.0"
+    "prisma": "6.11.1"
   },
   "peerDependencies": {
     "typescript": "5.8.3"
   },
   "dependencies": {
-    "@prisma/client": "6.9.0",
+    "@prisma/client": "6.11.1",
     "busboy": "1.6.0",
     "nanoid": "5.1.5",
     "zod": "3.25.46"

@@ -5,7 +5,15 @@ import { nanoid } from 'nanoid';
 import { META_DIR, TEMP_DIR } from './dirs.ts';
 import { logTask, type Task, updateTask } from './tasks';
 import { getFile, updateFile, type UserFile } from './files';
-import { cleanupFile, cleanupFiles, downloadFromS3ToDisk, handleS3DownAndUpAppend, handleS3DownAndUpSwap, spaces, uploadToS3FromDisk } from './s3.ts';
+import {
+  cleanupFile,
+  cleanupFiles,
+  downloadFromS3ToDisk,
+  handleS3DownAndUpAppend,
+  handleS3DownAndUpSwap,
+  uploadToS3FromDisk,
+  spaces,
+} from './s3.ts';
 import { tryCatch } from './promises.ts';
 import type {
   AddAudioTrackType,
