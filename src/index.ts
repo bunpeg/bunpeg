@@ -594,6 +594,7 @@ const server = serve({
       },
     },
 
+    // TODO: review need to keep
     "/dash/:file_id/files": {
       OPTIONS: async () => {
         return new Response('OK', { headers: CORS_HEADERS });
@@ -613,6 +614,54 @@ const server = serve({
         const files = dashFiles.contents ? dashFiles.contents.map(f => ({ path: f.key, size: f.size })) : [];
 
         return Response.json({ files }, { status: 200, headers: CORS_HEADERS })
+      },
+    },
+
+    "/dash/:file_id/manifesto.mpd": {
+      OPTIONS: async () => {
+        return new Response('OK', { headers: CORS_HEADERS });
+      },
+      GET: async (req) => {
+        const fileId = req.params.file_id;
+        if (!fileId) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
+
+        // TODO: need to handle pagination
+        const dashFiles = await spaces.list({
+          prefix: `${fileId}/dash`,
+          maxKeys: 100,
+        });
+
+        const manifest = dashFiles.contents?.find(f => f.key.endsWith('manifesto.mpd')) ?? null;
+        if (!manifest) return new Response('Manifest not found', { status: 400, headers: CORS_HEADERS });
+
+        console.log('manifest s3 path - ', manifest.key);
+        const manifestFile = spaces.file(manifest.key, { acl: 'public-read' });
+        return new Response(manifestFile);
+      },
+    },
+
+    "/dash/:file_id/:file_name": {
+      OPTIONS: async () => {
+        return new Response('OK', { headers: CORS_HEADERS });
+      },
+      GET: async (req) => {
+        const fileId = req.params.file_id;
+        if (!fileId) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
+
+        const fileName = req.params.file_name;
+        if (!fileName) return new Response("Invalid file name", { status: 400, headers: CORS_HEADERS });
+
+        // TODO: need to handle pagination
+        const dashFiles = await spaces.list({
+          prefix: `${fileId}/dash`,
+          maxKeys: 100,
+        });
+
+        const fileInfo = dashFiles.contents?.find(f => f.key.endsWith(fileName)) ?? null;
+        if (!fileInfo) return new Response('Manifest not found', { status: 400, headers: CORS_HEADERS });
+
+        const file = spaces.file(fileInfo.key, { acl: 'public-read' });
+        return new Response(file);
       },
     },
   },
