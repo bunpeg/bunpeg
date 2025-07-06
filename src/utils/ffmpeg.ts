@@ -271,7 +271,7 @@ export async function generateDashFiles(args: DashType, task: Task) {
     throw ffError;
   }
 
-  const segmentsPath = path.join(TEMP_DIR, `${task.code}/dash`);
+  const segmentsPath = path.join(TEMP_DIR, `${file.id}/dash`);
   await mkdir(segmentsPath, { recursive: true });
   const manifestoPath = path.join(segmentsPath, 'manifesto.mpd');
 
@@ -295,7 +295,7 @@ export async function generateDashFiles(args: DashType, task: Task) {
     if (seg.isDirectory()) continue;
 
     const segFilePath = path.join(seg.parentPath, seg.name);
-    const { error: uploadError } = await tryCatch(uploadToS3FromDisk(segFilePath, `${task.code}/dash/${seg.name}`));
+    const { error: uploadError } = await tryCatch(uploadToS3FromDisk(segFilePath, `${file.id}/dash/${seg.name}`));
     if (uploadError) {
       await rm(segmentsPath, { force: true, recursive: true });
       throw new Error(`Failed to upload DASH segments for task ${task.id}`);

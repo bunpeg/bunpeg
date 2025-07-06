@@ -7,7 +7,7 @@ import { tryCatch } from './promises.ts';
 import { getLocalFileMetadata } from './ffmpeg.ts';
 
 export const spaces = new S3Client({
-  bucket: 'uploads',
+  bucket: 'bunpeg',
   region: 'fra1',
   accessKeyId: process.env.DIGITAL_OCEAN_SPACE_KEY,
   secretAccessKey: process.env.DIGITAL_OCEAN_SPACE_SECRET,

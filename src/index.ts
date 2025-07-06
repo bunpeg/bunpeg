@@ -593,6 +593,28 @@ const server = serve({
         return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS })
       },
     },
+
+    "/dash/:file_id/files": {
+      OPTIONS: async () => {
+        return new Response('OK', { headers: CORS_HEADERS });
+      },
+      GET: async (req) => {
+        const fileId = req.params.file_id;
+        if (!fileId) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
+
+        const dbFile = await getFile(fileId);
+        if (!dbFile) return new Response('File not found', { status: 400, headers: CORS_HEADERS });
+
+        // TODO: need to handle pagination
+        const dashFiles = await spaces.list({
+          prefix: `${fileId}/dash`,
+          maxKeys: 100,
+        });
+        const files = dashFiles.contents ? dashFiles.contents.map(f => ({ path: f.key, size: f.size })) : [];
+
+        return Response.json({ files }, { status: 200, headers: CORS_HEADERS })
+      },
+    },
   },
   fetch() {
     return new Response("Hello from bunpeg!");
