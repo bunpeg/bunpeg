@@ -30,7 +30,7 @@ import {
 } from './utils/schemas.ts';
 import { startFFQueue } from './utils/queue-ff.ts';
 import { after, startBgQueue } from './utils/queue-bg.ts';
-import { downloadFromS3ToDisk, spaces } from './utils/s3.ts';
+import { spaces } from './utils/s3.ts';
 import { getFileMetadata, updateFileMetadata } from './utils/ffmpeg.ts';
 import { ALLOWED_MIME_TYPES } from './utils/formats.ts';
 import { tryCatch } from './utils/promises.ts';
@@ -591,53 +591,6 @@ const server = serve({
 
         await createTask(fileId, 'dash', { file_id: fileId });
         return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS })
-      },
-    },
-
-    // TODO: review need to keep
-    "/dash/:file_id/files": {
-      OPTIONS: async () => {
-        return new Response('OK', { headers: CORS_HEADERS });
-      },
-      GET: async (req) => {
-        const fileId = req.params.file_id;
-        if (!fileId) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
-
-        const dbFile = await getFile(fileId);
-        if (!dbFile) return new Response('File not found', { status: 400, headers: CORS_HEADERS });
-
-        // TODO: need to handle pagination
-        const dashFiles = await spaces.list({
-          prefix: `${fileId}/dash`,
-          maxKeys: 100,
-        });
-        const files = dashFiles.contents ? dashFiles.contents.map(f => ({ path: f.key, size: f.size })) : [];
-
-        return Response.json({ files }, { status: 200, headers: CORS_HEADERS })
-      },
-    },
-
-    "/dash/:file_id/:file_name": {
-      OPTIONS: async () => {
-        return new Response('OK', { headers: CORS_HEADERS });
-      },
-      GET: async (req) => {
-        const fileId = req.params.file_id;
-        if (!fileId) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
-
-        const fileName = req.params.file_name;
-        if (!fileName) return new Response("Invalid file name", { status: 400, headers: CORS_HEADERS });
-
-        const s3path = `${fileId}/dash/${fileName}`;
-        const exists = await spaces.exists(s3path);
-
-        if (!exists) return new Response('dash file not found', { status: 400, headers: CORS_HEADERS });
-
-        const localPath = path.join(TEMP_DIR, `cdn/${fileId}/${fileName}`);
-        await downloadFromS3ToDisk(s3path, localPath);
-        const localFile = Bun.file(localPath);
-
-        return new Response(localFile);
       },
     },
   },
