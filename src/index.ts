@@ -30,7 +30,7 @@ import {
 } from './utils/schemas.ts';
 import { startFFQueue } from './utils/queue-ff.ts';
 import { after, startBgQueue } from './utils/queue-bg.ts';
-import { spaces } from './utils/s3.ts';
+import { downloadFromS3ToDisk, spaces } from './utils/s3.ts';
 import { getFileMetadata, updateFileMetadata } from './utils/ffmpeg.ts';
 import { ALLOWED_MIME_TYPES } from './utils/formats.ts';
 import { tryCatch } from './utils/promises.ts';
@@ -617,29 +617,6 @@ const server = serve({
       },
     },
 
-    "/dash/:file_id/manifesto.mpd": {
-      OPTIONS: async () => {
-        return new Response('OK', { headers: CORS_HEADERS });
-      },
-      GET: async (req) => {
-        const fileId = req.params.file_id;
-        if (!fileId) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
-
-        // TODO: need to handle pagination
-        const dashFiles = await spaces.list({
-          prefix: `${fileId}/dash`,
-          maxKeys: 100,
-        });
-
-        const manifest = dashFiles.contents?.find(f => f.key.endsWith('manifesto.mpd')) ?? null;
-        if (!manifest) return new Response('Manifest not found', { status: 400, headers: CORS_HEADERS });
-
-        console.log('manifest s3 path - ', manifest.key);
-        const manifestFile = spaces.file(manifest.key, { acl: 'public-read' });
-        return new Response(manifestFile);
-      },
-    },
-
     "/dash/:file_id/:file_name": {
       OPTIONS: async () => {
         return new Response('OK', { headers: CORS_HEADERS });
@@ -651,17 +628,16 @@ const server = serve({
         const fileName = req.params.file_name;
         if (!fileName) return new Response("Invalid file name", { status: 400, headers: CORS_HEADERS });
 
-        // TODO: need to handle pagination
-        const dashFiles = await spaces.list({
-          prefix: `${fileId}/dash`,
-          maxKeys: 100,
-        });
+        const s3path = `${fileId}/dash/${fileName}`;
+        const exists = await spaces.exists(s3path);
 
-        const fileInfo = dashFiles.contents?.find(f => f.key.endsWith(fileName)) ?? null;
-        if (!fileInfo) return new Response('Manifest not found', { status: 400, headers: CORS_HEADERS });
+        if (!exists) return new Response('dash file not found', { status: 400, headers: CORS_HEADERS });
 
-        const file = spaces.file(fileInfo.key, { acl: 'public-read' });
-        return new Response(file);
+        const localPath = path.join(TEMP_DIR, `cdn/${fileId}/${fileName}`);
+        await downloadFromS3ToDisk(s3path, localPath);
+        const localFile = Bun.file(localPath);
+
+        return new Response(localFile);
       },
     },
   },
