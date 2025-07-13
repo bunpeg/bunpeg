@@ -6,6 +6,7 @@ export interface UserFile {
   file_path: string;
   mime_type: string;
   metadata?: string | null;
+  parent?: string;
   created_at: string;
 }
 
@@ -22,8 +23,8 @@ export async function updateFile(fileId: UserFile['id'], file: Partial<Omit<User
   await sql`UPDATE files SET ${sql(file)} WHERE id = ${fileId}`;
 }
 
-export async  function deleteFile(fileId: UserFile['id']) {
-  await sql`DELETE FROM files WHERE id = ${fileId}`;
+export async function deleteFile(fileId: UserFile['id']) {
+  await sql`DELETE FROM files WHERE id = ${fileId} OR parent = ${fileId}`;
 }
 
 export async function checkFilesExist(fileIds: string[]): Promise<boolean> {

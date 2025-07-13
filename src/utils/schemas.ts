@@ -48,12 +48,14 @@ export const audioCodec = z.enum([
 export type AudioCodec = z.infer<typeof audioCodec>;
 
 const fileId = z.string().min(1, "fileId is required");
+const parentId = z.string().min(1, "parentId is required").optional();
 const mode = z.enum(['append', 'replace']).default('replace');
 
 const TranscodeParams = z.object({
   format: videoFormat,
   video_codec: videoCodec.optional(),
   audio_codec: audioCodec.optional(),
+  parent: parentId,
   mode,
 });
 export const TranscodeSchema = TranscodeParams.extend({ file_id: fileId });
@@ -63,6 +65,7 @@ const ResizeVideoParams = z.object({
   width: z.number().int().min(1, 'Width required'),
   height: z.number().int().min(1, 'Height required'),
   output_format: videoFormat,
+  parent: parentId,
   mode,
 });
 export const ResizeVideoSchema = ResizeVideoParams.extend({ file_id: fileId });
@@ -72,6 +75,7 @@ const TrimParams = z.object({
   start: z.number({ required_error: "Start time is required" }),
   duration: z.number({ required_error: "Duration is required" }),
   output_format: videoFormat,
+  parent: parentId,
   mode,
 });
 export const TrimSchema = TrimParams.extend({ file_id: fileId });
@@ -80,6 +84,7 @@ export type TrimType = z.infer<typeof TrimSchema>;
 const CutEndParams = z.object({
   duration: z.number({ required_error: "Duration is required" }),
   output_format: videoFormat,
+  parent: parentId,
   mode,
 });
 export const CutEndSchema = CutEndParams.extend({ file_id: fileId });
@@ -88,6 +93,7 @@ export type CutEndType = z.infer<typeof CutEndSchema>;
 const ExtractAudioParams = z.object({
   audio_format: audioFormat,
   audio_codec: audioCodec.optional(),
+  parent: parentId,
   mode,
 });
 export const ExtractAudioSchema = ExtractAudioParams.extend({ file_id: fileId });
@@ -95,6 +101,7 @@ export type ExtractAudioType = z.infer<typeof ExtractAudioSchema>;
 
 const RemoveAudioParams = z.object({
   output_format: videoFormat,
+  parent: parentId,
   mode,
 })
 export const RemoveAudioSchema = RemoveAudioParams.extend({ file_id: fileId });
@@ -106,6 +113,8 @@ export const AddAudioTrackSchema = z.object({
   output_format: videoFormat,
   video_codec: videoCodec.optional(),
   audio_codec: audioCodec.optional(),
+  mode: mode.default('append'),
+  parent: parentId,
 });
 export type AddAudioTrackType = z.infer<typeof AddAudioTrackSchema>;
 
@@ -113,6 +122,8 @@ export const MergeMediaSchema = z.object({
   file_ids: z.array(fileId).min(2, 'At least two files required'),
   // TODO: check if the operation can take video or audio as output, or just video
   output_format: z.string().min(1, 'Output format is required'),
+  mode: mode.default('append'),
+  parent: parentId,
 });
 export type MergeMediaType = z.infer<typeof MergeMediaSchema>;
 
@@ -120,6 +131,7 @@ export const ExtractThumbnailParams = z.object({
   timestamp: z.string().min(1, 'Timestamp required'),
   image_format: imageFormat,
   mode,
+  parent: parentId,
 })
 export const ExtractThumbnailSchema = ExtractThumbnailParams.extend({ file_id: fileId });
 export type ExtractThumbnailType = z.infer<typeof ExtractThumbnailSchema>;

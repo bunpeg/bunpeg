@@ -41,6 +41,7 @@ model files {
    * ```
    */
   metadata   String?
+  parent     String?
   created_at DateTime @default(now())
 }
 

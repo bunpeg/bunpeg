@@ -26,17 +26,18 @@ interface Params {
   task: Task;
   fileIds: string[];
   outputFile: string;
+  parentFile?: string;
   operation: (params: { s3Paths: string[]; inputPaths: string[]; outputPath: string }) => Promise<void>;
 }
 
 /**
  * This function handles downloading the source file from the S3 client
  * and the subsequent upload, plus cleanup of local files.
- * This version is for operations that modify a file (eg: trim, transcode, remove-audio...).
+ * This version is for the `replace` mode of operations.
  */
 export async function handleS3DownAndUpSwap(params: Params) {
+  const { task, outputFile, parentFile } = params;
   const { s3Paths, inputPaths, outputPath } = await __executeS3DownAndUp(params);
-  const { task, outputFile } = params;
 
   const { data: newFileName, error: fileNameError } = await tryCatch(resolveNewFileName(task.file_id, outputFile));
   if (fileNameError) {
@@ -54,6 +55,9 @@ export async function handleS3DownAndUpSwap(params: Params) {
     ...(data ? {
       mime_type: data.mimeType,
       metadata: JSON.stringify(data.meta),
+    } : {}),
+    ...(parentFile ? {
+      parent: parentFile,
     } : {})
   });
 
@@ -68,11 +72,11 @@ export async function handleS3DownAndUpSwap(params: Params) {
 /**
  * This function handles downloading the source file from the S3 client
  * and the subsequent upload, plus cleanup of local files.
- * This version is for operations that create a new file (eg: extract-audio, merge, extract-thumbnail...).
+ * This version is for the `append` mode of operations.
  */
 export async function handleS3DownAndUpAppend(params: Params) {
+  const { task, outputFile, parentFile } = params;
   const { inputPaths, outputPath } = await __executeS3DownAndUp(params);
-  const { task, outputFile } = params;
   const newFileId = extractFileName(outputFile);
   const newFile = Bun.file(outputFile);
 
@@ -87,7 +91,7 @@ export async function handleS3DownAndUpAppend(params: Params) {
 
   const { data: metadata } = await tryCatch(getLocalFileMetadata(outputPath));
   if (metadata) {
-    await updateFile(newFileId, { metadata: JSON.stringify(metadata.meta) });
+    await updateFile(newFileId, { metadata: JSON.stringify(metadata.meta), ...(parentFile ? { parent: parentFile } : {}) });
   }
 
   await cleanupFiles([...inputPaths, outputPath]);

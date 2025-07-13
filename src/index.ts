@@ -74,16 +74,6 @@ const server = serve({
       return new Response(parts[0]);
     },
 
-    "/files": {
-      OPTIONS: async () => {
-        return new Response('OK', { headers: CORS_HEADERS });
-      },
-      GET: async () => {
-        const files = await sql`SELECT * FROM files ORDER BY created_at`;
-        return Response.json({ files }, { status: 200, headers: CORS_HEADERS });
-      }
-    },
-
     "/tasks": {
       OPTIONS: async () => {
         return new Response('OK', { headers: CORS_HEADERS });
@@ -188,6 +178,20 @@ const server = serve({
         })
 
         return Response.json({ fileId }, { status: 200, headers: CORS_HEADERS });
+      }
+    },
+
+    "/files": {
+      OPTIONS: async () => {
+        return new Response('OK', { headers: CORS_HEADERS });
+      },
+      GET: async (req) => {
+        const url = new URL(req.url);
+        const searchParams = url.searchParams;
+        const parent = searchParams.get('parent');
+        const parentFilter = parent ? sql`WHERE parent = ${parent}` : sql``;
+        const files = await sql`SELECT * FROM files ${parentFilter} ORDER BY created_at`;
+        return Response.json({ files }, { status: 200, headers: CORS_HEADERS });
       }
     },
 
@@ -333,10 +337,12 @@ const server = serve({
         const dbFile = await getFile(fileId);
         if (!dbFile) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
 
-        const file = spaces.file(dbFile.file_path, { acl: 'public-read' });
-        if (await file.exists()) {
-          await file.delete();
-        }
+        const file = spaces.file(dbFile.file_path);
+        if (await file.exists()) await file.delete();
+
+        const dashS3Key = `${fileId}/dash`;
+        const dashFolder = spaces.file(dashS3Key);
+        if (await dashFolder.exists()) await dashFolder.delete();
 
         await deleteAllTasksForFile(fileId);
         await deleteFile(fileId);

@@ -7,7 +7,6 @@ import { logTask, type Task, updateTask } from './tasks';
 import { getFile, updateFile, type UserFile } from './files';
 import {
   cleanupFile,
-  cleanupFiles,
   downloadFromS3ToDisk,
   handleS3DownAndUpAppend,
   handleS3DownAndUpSwap,
@@ -39,8 +38,9 @@ export function transcode(args: TranscodeType, task: Task) {
   const s3Operation = args.mode === 'replace' ? handleS3DownAndUpSwap : handleS3DownAndUpAppend;
   return s3Operation({
     task,
-    fileIds: [args.file_id],
     outputFile,
+    fileIds: [args.file_id],
+    parentFile: args.parent,
     operation: async ({ inputPaths, outputPath }) => {
       const inputFile = inputPaths[0]!;
       const hasVideo = await checkFileHasVideoStream(inputFile);
@@ -61,8 +61,9 @@ export function resizeVideo(args: ResizeVideoType, task: Task) {
   const s3Operation = args.mode === 'replace' ? handleS3DownAndUpSwap : handleS3DownAndUpAppend;
   return s3Operation({
     task,
-    fileIds: [args.file_id],
     outputFile,
+    fileIds: [args.file_id],
+    parentFile: args.parent,
     operation: async ({ inputPaths, outputPath }) => {
       const inputFile = inputPaths[0]!;
       const hasVideo = await checkFileHasVideoStream(inputFile);
@@ -78,8 +79,9 @@ export function trim(args: TrimType, task: Task) {
   const s3Operation = args.mode === 'replace' ? handleS3DownAndUpSwap : handleS3DownAndUpAppend;
   return s3Operation({
     task,
-    fileIds: [args.file_id],
     outputFile,
+    fileIds: [args.file_id],
+    parentFile: args.parent,
     operation: ({ inputPaths, outputPath }) => {
       return runFFmpeg(
         ['-i', inputPaths[0]!, '-ss', args.start.toString(), '-t', args.duration.toString(), '-c', 'copy', outputPath],
@@ -94,8 +96,9 @@ export function cutEnd(args: CutEndType, task: Task) {
   const s3Operation = args.mode === 'replace' ? handleS3DownAndUpSwap : handleS3DownAndUpAppend;
   return s3Operation({
     task,
-    fileIds: [args.file_id],
     outputFile,
+    fileIds: [args.file_id],
+    parentFile: args.parent,
     operation: async ({ inputPaths, outputPath }) => {
       const totalDuration = await getVideoDuration(inputPaths[0]!);
       const keepDuration = totalDuration - args.duration;
@@ -111,8 +114,9 @@ export function extractAudio(args: ExtractAudioType, task: Task) {
   const s3Operation = args.mode === 'replace' ? handleS3DownAndUpSwap : handleS3DownAndUpAppend;
   return s3Operation({
     task,
-    fileIds: [args.file_id],
     outputFile,
+    fileIds: [args.file_id],
+    parentFile: args.parent,
     operation: async ({ inputPaths, outputPath }) => {
       const inputFile = inputPaths[0]!;
       const hasAudio = await checkFileHasAudioStream(inputFile);
@@ -128,8 +132,9 @@ export function removeAudio(args: RemoveAudioType, task: Task) {
   const s3Operation = args.mode === 'replace' ? handleS3DownAndUpSwap : handleS3DownAndUpAppend;
   return s3Operation({
     task,
-    fileIds: [args.file_id],
     outputFile,
+    fileIds: [args.file_id],
+    parentFile: args.parent,
     operation: async ({ inputPaths, outputPath }) => {
       const inputFile = inputPaths[0]!;
       const hasAudio = await checkFileHasAudioStream(inputFile);
@@ -141,10 +146,13 @@ export function removeAudio(args: RemoveAudioType, task: Task) {
 }
 
 export function addAudioTrack(args: AddAudioTrackType, task: Task) {
-  return handleS3DownAndUpAppend({
+  const outputFile = args.mode === 'replace' ? `${task.code}.${args.output_format}` : `${nanoid(8)}.${args.output_format}`;
+  const s3Operation = args.mode === 'replace' ? handleS3DownAndUpSwap : handleS3DownAndUpAppend;
+  return s3Operation({
     task,
+    outputFile,
+    parentFile: args.parent ?? args.video_file_id,
     fileIds: [args.video_file_id, args.audio_file_id],
-    outputFile: `${nanoid(8)}.${args.output_format}`,
     operation: async ({ inputPaths, outputPath }) => {
       const videoPath = inputPaths[0]!;
       const audioPath = inputPaths[1]!;
@@ -166,10 +174,13 @@ export function addAudioTrack(args: AddAudioTrackType, task: Task) {
 }
 
 export function mergeMedia(args: MergeMediaType, task: Task) {
-  return handleS3DownAndUpAppend({
+  const outputFile = args.mode === 'replace' ? `${task.code}.${args.output_format}` : `${nanoid(8)}.${args.output_format}`;
+  const s3Operation = args.mode === 'replace' ? handleS3DownAndUpSwap : handleS3DownAndUpAppend;
+  return s3Operation({
     task: task,
+    outputFile,
     fileIds: args.file_ids,
-    outputFile: `${nanoid(8)}.${args.output_format}`,
+    parentFile: args.parent ?? args.file_ids[0],
     operation: async ({ inputPaths, outputPath }) => {
       // Step 1: Probe first video for width and height
       const { data: probe, error: probeError } = await tryCatch(getVideoMetadata(inputPaths[0]!));
@@ -264,7 +275,7 @@ export async function generateDashFiles(args: DashType, task: Task) {
   await mkdir(segmentsPath, { recursive: true });
   const manifestoPath = path.join(segmentsPath, 'manifesto.mpd');
 
-  const { } = await tryCatch(
+  const { error: ffmpegError } = await tryCatch(
     runFFmpeg([
       '-i', localPath,
       '-c:v', 'libx264',
@@ -280,6 +291,12 @@ export async function generateDashFiles(args: DashType, task: Task) {
     ], task)
   );
 
+  if (ffmpegError) {
+    await cleanupFile(localPath);
+    await rm(segmentsPath, { force: true, recursive: true });
+    throw new Error(`Failed to generate DASH segments for task ${task.id}`);
+  }
+
   const segmentedFiles = await readdir(segmentsPath, { withFileTypes: true });
   for (const seg of segmentedFiles) {
     if (seg.isDirectory()) continue;
@@ -287,6 +304,7 @@ export async function generateDashFiles(args: DashType, task: Task) {
     const segFilePath = path.join(seg.parentPath, seg.name);
     const { error: uploadError } = await tryCatch(uploadToS3FromDisk(segFilePath, `${file.id}/dash/${seg.name}`, { acl: 'public-read' }));
     if (uploadError) {
+      await cleanupFile(localPath);
       await rm(segmentsPath, { force: true, recursive: true });
       throw new Error(`Failed to upload DASH segments for task ${task.id}`);
     }
@@ -295,6 +313,8 @@ export async function generateDashFiles(args: DashType, task: Task) {
   if (await Bun.file(segmentsPath).exists()) {
     await rm(segmentsPath, { force: true, recursive: true });
   }
+
+  await cleanupFile(localPath);
 }
 
 export async function updateFileMetadata(fileId: UserFile['id']) {
