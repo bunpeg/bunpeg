@@ -87,11 +87,12 @@ export async function handleS3DownAndUpAppend(params: Params) {
     file_name: newFileName ?? outputFile,
     file_path: outputFile,
     mime_type: newFile.type,
+    ...(parentFile ? { parent: parentFile } : {})
   });
 
   const { data: metadata } = await tryCatch(getLocalFileMetadata(outputPath));
   if (metadata) {
-    await updateFile(newFileId, { metadata: JSON.stringify(metadata.meta), ...(parentFile ? { parent: parentFile } : {}) });
+    await updateFile(newFileId, { metadata: JSON.stringify(metadata.meta) });
   }
 
   await cleanupFiles([...inputPaths, outputPath]);

@@ -28,7 +28,7 @@ export async function deleteFile(fileId: UserFile['id']) {
 }
 
 export async function getDecendants(fileId: UserFile['id']) {
-  const [files] = await sql`SELECT * FROM files WHERE parent = ${fileId}`;
+  const files = await sql`SELECT * FROM files WHERE parent = ${fileId}`;
   return files as UserFile[];
 }
 
