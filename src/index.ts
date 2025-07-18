@@ -11,6 +11,7 @@ import {
   createTask,
   deleteAllTasksForFile,
   getTasksForFile,
+  getTasksForFileAndDecendants,
   restoreAllProcessingTasksToQueued,
   type Task,
 } from './utils/tasks.ts';
@@ -256,7 +257,7 @@ const server = serve({
         const fileId = req.params.file_id;
         if (!fileId) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
 
-        const tasks = await getTasksForFile(fileId);
+        const tasks = await getTasksForFileAndDecendants(fileId);
 
         if (tasks.length === 0) {
           return Response.json({ fileId, status: 'empty' }, { status: 200, headers: CORS_HEADERS });
@@ -550,7 +551,7 @@ const server = serve({
         await bulkCreateTasks(operations.map(({ type: operation, ...args }) => ({
           fileId: file_id,
           operation,
-          args: { ...args, file_id },
+          args: { file_id, ...args },
         })))
 
         return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS });
@@ -584,7 +585,7 @@ const server = serve({
       }
     },
 
-    "/dash/:file_id/process": {
+    "/dash/:file_id": {
       OPTIONS: async () => {
         return new Response('OK', { headers: CORS_HEADERS });
       },

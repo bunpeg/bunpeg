@@ -55,5 +55,5 @@ model tasks {
   status    String // 'queued' | 'processing' | 'completed' | 'failed' | 'unreachable'
   error     String?
 
-  @@index([file_id])
+  @@index([file_id, status])
 }

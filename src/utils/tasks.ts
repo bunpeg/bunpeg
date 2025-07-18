@@ -18,6 +18,14 @@ export async function getTasksForFile(fileId: UserFile['id']) {
   return (await sql`SELECT * FROM tasks WHERE file_id = ${fileId} ORDER BY id`) as Task[];
 }
 
+export async function getTasksForFileAndDecendants(fileId: UserFile['id']) {
+  const files = await sql`SELECT id FROM files WHERE id = ${fileId} OR parent = ${fileId}`;
+  return (
+    await sql`SELECT * FROM tasks WHERE file_id IN ${sql((files as UserFile[]).map((f) => ({ id: f.id })), 'id')} ORDER BY id`
+  ) as Task[];
+}
+
+
 export async function getNextPendingTasks(params: { excludeFileIds: string[], limit: number }) {
   if (params.excludeFileIds.length === 0) {
     const query = await sql`
