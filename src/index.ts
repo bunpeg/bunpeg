@@ -15,7 +15,7 @@ import {
   restoreAllProcessingTasksToQueued,
   type Task,
 } from './utils/tasks.ts';
-import { checkFilesExist, createFile, deleteFile, getFile } from './utils/files.ts';
+import { checkFilesExist, createFile, deleteFile, getDecendants, getFile } from './utils/files.ts';
 import {
   AddAudioTrackSchema,
   BulkSchema,
@@ -344,6 +344,22 @@ const server = serve({
         const dashS3Key = `${fileId}/dash`;
         const dashFolder = spaces.file(dashS3Key);
         if (await dashFolder.exists()) await dashFolder.delete();
+
+        const decendants = await getDecendants(fileId);
+        const delPromises = decendants.map(async (decendant) => {
+          const decendantFile = spaces.file(decendant.file_path);
+          if (await decendantFile.exists()) await decendantFile.delete();
+
+          const descDashS3Key = `${decendant.id}/dash`;
+          const descDashFolder = spaces.file(descDashS3Key);
+          if (await dashFolder.exists()) await descDashFolder.delete();
+        });
+
+        const delResults = await Promise.allSettled(delPromises);
+
+        if (delResults.some((result) => result.status === 'rejected')) {
+          console.error("Failed to delete some decendants of file", fileId);
+        }
 
         await deleteAllTasksForFile(fileId);
         await deleteFile(fileId);

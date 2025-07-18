@@ -27,6 +27,11 @@ export async function deleteFile(fileId: UserFile['id']) {
   await sql`DELETE FROM files WHERE id = ${fileId} OR parent = ${fileId}`;
 }
 
+export async function getDecendants(fileId: UserFile['id']) {
+  const [files] = await sql`SELECT * FROM files WHERE parent = ${fileId}`;
+  return files as UserFile[];
+}
+
 export async function checkFilesExist(fileIds: string[]): Promise<boolean> {
   if (fileIds.length === 0) return false;
 
