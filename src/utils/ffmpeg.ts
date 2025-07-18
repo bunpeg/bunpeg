@@ -83,8 +83,9 @@ export function trim(args: TrimType, task: Task) {
     fileIds: [args.file_id],
     parentFile: args.parent,
     operation: ({ inputPaths, outputPath }) => {
+      const outputEncoding = args.exact ? ['-c:v', 'libx264', '-c:a', 'aac'] : ['-c', 'copy'];
       return runFFmpeg(
-        ['-i', inputPaths[0]!, '-ss', args.start.toString(), '-t', args.duration.toString(), '-c', 'copy', outputPath],
+        ['-i', inputPaths[0]!, '-ss', args.start.toString(), '-t', args.duration.toString(), ...outputEncoding, outputPath],
         task,
       );
     },

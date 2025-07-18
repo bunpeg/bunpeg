@@ -75,6 +75,7 @@ const TrimParams = z.object({
   start: z.number({ required_error: "Start time is required" }),
   duration: z.number({ required_error: "Duration is required" }),
   output_format: videoFormat,
+  exact: z.boolean().default(false),
   parent: parentId,
   mode,
 });
