@@ -30,6 +30,7 @@ import type {
   VideoCodec,
   VideoFormat,
 } from './schemas.ts';
+import { performance } from 'node:perf_hooks';
 
 export function transcode(args: TranscodeType, task: Task) {
   validateMuxCombination(args.format, args.video_codec || null, args.audio_codec || null);
@@ -589,9 +590,21 @@ function validateMuxCombination(
 
 
 async function runFFmpeg(args: string[], task: Task) {
-  logOperation(JSON.stringify(["ffmpeg", ...args]));
+  logOperation(JSON.stringify([
+    'ffmpeg',
+    '-benchmark',
+    '-threads', '0',
+    '-thread_queue_size', '256',
+    ...args,
+  ]));
 
-  const proc = Bun.spawn(["ffmpeg", ...args], {
+  const proc = Bun.spawn([
+    'ffmpeg',
+    '-benchmark',
+    '-threads', '0',
+    '-thread_queue_size', '256',
+    ...args,
+  ], {
     timeout: 1000 * 60 * 15, // 15 minutes
   });
 
