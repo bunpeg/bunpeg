@@ -294,6 +294,7 @@ export async function generateDashFiles(args: DashType, task: Task) {
   );
 
   if (ffmpegError) {
+    console.error('FFmpeg error:', ffmpegError);
     await cleanupFile(localPath);
     await rm(segmentsPath, { force: true, recursive: true });
     throw new Error(`Failed to generate DASH segments for task ${task.id}`);
@@ -391,7 +392,10 @@ async function getVideoMetadata(inputPath: string) {
     "-show_entries", "stream=width,height",
     "-of", "json",
     inputPath,
-  ]);
+  ], {
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
 
   await proc.exited;
 
@@ -424,7 +428,10 @@ async function getAudioMetadata(inputPath: string) {
     "-show_entries", "stream=sample_rate,channels",
     "-of", "json",
     inputPath,
-  ]);
+  ], {
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
 
   await proc.exited;
 
@@ -455,7 +462,10 @@ async function getImageMetadata(inputPath: string) {
     "-show_entries", "stream=width,height,color_range,color_space",
     "-of", "json",
     inputPath,
-  ]);
+  ], {
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
 
   await proc.exited;
 
@@ -480,14 +490,14 @@ async function getImageMetadata(inputPath: string) {
 }
 
 async function checkFileHasVideoStream(filePath: string) {
-  const result = await $`ffprobe -v quiet -print_format json -show_streams ${filePath}`;
+  const result = await $`ffprobe -v quiet -print_format json -show_streams ${filePath}`.quiet();
   const parsed = JSON.parse(result.stdout.toString());
 
   return (parsed.streams as any[]).some((s: any) => s.codec_type === "video");
 }
 
 async function checkFileHasAudioStream(filePath: string) {
-  const result = await $`ffprobe -v quiet -print_format json -show_streams ${filePath}`;
+  const result = await $`ffprobe -v quiet -print_format json -show_streams ${filePath}`.quiet();
   const parsed = JSON.parse(result.stdout.toString());
 
   return (parsed.streams as any[]).some((s: any) => s.codec_type === "audio");
@@ -590,21 +600,18 @@ function validateMuxCombination(
 
 
 async function runFFmpeg(args: string[], task: Task) {
-  logOperation(JSON.stringify([
+  const command = [
     'ffmpeg',
     '-benchmark',
     '-threads', '0',
     '-thread_queue_size', '256',
     ...args,
-  ]));
+  ];
+  logOperation(JSON.stringify(command));
 
-  const proc = Bun.spawn([
-    'ffmpeg',
-    '-benchmark',
-    '-threads', '0',
-    '-thread_queue_size', '256',
-    ...args,
-  ], {
+  const proc = Bun.spawn(command, {
+    stdout: 'pipe',
+    stderr: 'pipe',
     timeout: 1000 * 60 * 15, // 15 minutes
   });
 
@@ -617,11 +624,21 @@ async function runFFmpeg(args: string[], task: Task) {
     throw new Error(error);
   }
 
+  const usage = proc.resourceUsage();
+  if (usage) {
+    logOperation(JSON.stringify(command), 'Resource Usage');
+    console.log('--------------')
+    console.log(`Max memory used: ${usage.maxRSS} bytes`);
+    console.log(`CPU time (user): ${usage.cpuTime.user} µs`);
+    console.log(`CPU time (system): ${usage.cpuTime.system} µs`);
+    console.log('--------------------------------------------------------------')
+  }
+
   logTask(task.id, 'ffmpeg finished with exit code 0');
 }
 
-export function logOperation(message: string) {
-  console.log(`------- FFmpeg: ------------`);
+export function logOperation(message: string, label = 'FFmpeg') {
+  console.log(`------- ${label}: ------------`);
   console.log(message);
   console.log(' ');
 }

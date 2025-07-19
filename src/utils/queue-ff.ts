@@ -60,11 +60,7 @@ async function executePass() {
 
 async function startTask(task: Task) {
   logQueueMessage(`Picking up task: ${task.id} to ${task.operation}`);
-  const { error: taskError } = await tryCatch(updateTask(task.id, { status: 'processing' }));
-  if (taskError) {
-    logQueueError(`Failed to update task ${task.id} start processing, skipping cycle...`, taskError);
-    return;
-  }
+  updateTask(task.id, { status: 'processing' });
   // Lock task & file
   activeTasks.add(task.id);
   lockedFiles.add(task.file_id);
