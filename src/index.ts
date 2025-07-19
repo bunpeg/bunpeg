@@ -10,7 +10,6 @@ import {
   bulkCreateTasks,
   createTask,
   deleteAllTasksForFile,
-  getTasksForFile,
   getTasksForFileAndDecendants,
   restoreAllProcessingTasksToQueued,
   type Task,
@@ -31,11 +30,11 @@ import {
 } from './utils/schemas.ts';
 import { startFFQueue } from './utils/queue-ff.ts';
 import { after, startBgQueue } from './utils/queue-bg.ts';
-import { spaces } from './utils/s3.ts';
+import { spaces, deleteDashFiles } from './utils/s3.ts';
 import { getFileMetadata, updateFileMetadata } from './utils/ffmpeg.ts';
-import { ALLOWED_MIME_TYPES } from './utils/formats.ts';
 import { tryCatch } from './utils/promises.ts';
 import { initDir, META_DIR, TEMP_DIR } from './utils/dirs.ts';
+import { ALLOWED_MIME_TYPES } from './utils/formats.ts';
 
 const MAX_FILE_SIZE_UPLOAD = Number(process.env.MAX_FILE_SIZE_UPLOAD);
 
@@ -341,24 +340,22 @@ const server = serve({
         const file = spaces.file(dbFile.file_path);
         if (await file.exists()) await file.delete();
 
-        const dashS3Key = `${fileId}/dash`;
-        const dashFolder = spaces.file(dashS3Key);
-        if (await dashFolder.exists()) await dashFolder.delete();
+        const { error: dashError } = await tryCatch(deleteDashFiles(fileId));
+        if (dashError) {
+          console.error(`Failed to delete DASH files for ${fileId}:`, dashError);
+        }
 
         const decendants = await getDecendants(fileId);
         const delPromises = decendants.map(async (decendant) => {
           const decendantFile = spaces.file(decendant.file_path);
           if (await decendantFile.exists()) await decendantFile.delete();
-
-          const descDashS3Key = `${decendant.id}/dash`;
-          const descDashFolder = spaces.file(descDashS3Key);
-          if (await dashFolder.exists()) await descDashFolder.delete();
+          await deleteDashFiles(decendant.id);
         });
 
         const delResults = await Promise.allSettled(delPromises);
 
         if (delResults.some((result) => result.status === 'rejected')) {
-          console.error("Failed to delete some decendants of file", fileId);
+          console.error(`Failed to delete some decendants of file ${fileId}`, fileId);
         }
 
         await deleteAllTasksForFile(fileId);

@@ -177,3 +177,45 @@ export async function cleanupFile(path: string) {
     await file.delete();
   }
 }
+
+export async function deleteDashFiles(fileId: UserFile['id']) {
+  const prefix = `${fileId}/dash/`;
+  let continuationToken: string | undefined;
+  let totalDeleted = 0;
+
+  do {
+    const { data: listResponse, error: listError } = await tryCatch(
+      spaces.list({
+        prefix,
+        maxKeys: 500,
+        continuationToken,
+      })
+    );
+
+    if (listError) {
+      console.error(`Failed to list objects with prefix ${prefix}:`, listError);
+      throw listError;
+    }
+
+    if (!listResponse?.contents || listResponse.contents.length === 0) {
+      break;
+    }
+
+    // Delete all files in this batch
+    const deletePromises = listResponse.contents.map(async (obj) => {
+      const { error: deleteError } = await tryCatch(spaces.file(obj.key).delete());
+      if (deleteError) {
+        console.error(`Failed to delete ${obj.key}:`, deleteError);
+        throw deleteError;
+      }
+      return obj.key;
+    });
+
+    const deletedKeys = await Promise.all(deletePromises);
+    totalDeleted += deletedKeys.length;
+
+    continuationToken = listResponse.nextContinuationToken;
+  } while (continuationToken);
+
+  return totalDeleted;
+}

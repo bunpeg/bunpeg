@@ -50,6 +50,7 @@ async function executePass() {
   if (shouldRun && activeTasks.size < MAX_CONCURRENT_TASKS) {
     const availableSlots = MAX_CONCURRENT_TASKS - activeTasks.size;
     const tasks = await getNextPendingTasks({ excludeFileIds: Array.from(lockedFiles), limit: availableSlots });
+    // console.log('tasks', tasks.map(t => ({ id: t.id, operation: t.operation })));
     if (tasks.length === 0) return;
 
     for (const task of tasks) {
@@ -61,7 +62,6 @@ async function executePass() {
 async function startTask(task: Task) {
   logQueueMessage(`Picking up task: ${task.id} to ${task.operation}`);
   updateTask(task.id, { status: 'processing' });
-  // Lock task & file
   activeTasks.add(task.id);
   lockedFiles.add(task.file_id);
 
@@ -74,23 +74,13 @@ async function startTask(task: Task) {
     await updateTask(task.id, { status: 'completed' });
   }
 
-  removeTaskFromQueue(task.id);
-  removeFileLock(task.file_id);
+  activeTasks.delete(task.id);
+  lockedFiles.delete(task.file_id);
 
   // After finishing, try to fill the slot again
   if (shouldRun) {
     void executePass();
   }
-}
-
-export function removeTaskFromQueue(taskId: Task['id']) {
-  logQueueMessage(`Removing task ${taskId} from queue`);
-  activeTasks.delete(taskId);
-}
-
-export function removeFileLock(fileId: UserFile['id']) {
-  logQueueMessage(`Removing file lock ${fileId}`);
-  lockedFiles.delete(fileId);
 }
 
 async function runOperation(task: Task) {

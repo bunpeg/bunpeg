@@ -590,7 +590,8 @@ function validateMuxCombination(
   }
 
   // Common audio formats (when videoCodec is null, meaning extracting audio)
-  if (!videoCodec && (outputFormat === "mp3" || outputFormat === "m4a" || outputFormat === "aac" || outputFormat === "flac" || outputFormat === "wav" || outputFormat === "opus")) {
+  const audioFormats = ['mp3', 'm4a', 'aac', 'flac', 'wav', 'opus']
+  if (!videoCodec && audioFormats.includes(outputFormat)) {
     if (audioCodec && outputFormat !== audioCodec) {
       // Basic check: if output is an audio format, audio codec should ideally match or be compatible
       console.warn(`Output format ${outputFormat} and audio codec ${audioCodec} might not be a direct match.`);
@@ -610,7 +611,7 @@ async function runFFmpeg(args: string[], task: Task) {
   logOperation(JSON.stringify(command));
 
   const proc = Bun.spawn(command, {
-    stdout: 'pipe',
+    stdout: 'inherit',
     stderr: 'pipe',
     timeout: 1000 * 60 * 15, // 15 minutes
   });
@@ -626,12 +627,11 @@ async function runFFmpeg(args: string[], task: Task) {
 
   const usage = proc.resourceUsage();
   if (usage) {
-    logOperation(JSON.stringify(command), 'Resource Usage');
-    console.log('--------------')
+    // console.log('--------------------------------------------------------------')
+    console.log('Resource Usage')
     console.log(`Max memory used: ${usage.maxRSS} bytes`);
     console.log(`CPU time (user): ${usage.cpuTime.user} µs`);
     console.log(`CPU time (system): ${usage.cpuTime.system} µs`);
-    console.log('--------------------------------------------------------------')
   }
 
   logTask(task.id, 'ffmpeg finished with exit code 0');
