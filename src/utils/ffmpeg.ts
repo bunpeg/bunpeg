@@ -603,7 +603,6 @@ function validateMuxCombination(
 async function runFFmpeg(args: string[], task: Task) {
   const command = [
     'ffmpeg',
-    '-benchmark',
     '-threads', '0',
     '-thread_queue_size', '256',
     ...args,
