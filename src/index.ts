@@ -31,7 +31,7 @@ import {
 import { startFFQueue } from './utils/queue-ff.ts';
 import { after, startBgQueue } from './utils/queue-bg.ts';
 import { spaces, deleteDashFiles } from './utils/s3.ts';
-import { getFileMetadata, updateFileMetadata } from './utils/ffmpeg.ts';
+import { getFileMetadata, probeFileContent, updateFileMetadata } from './utils/ffmpeg.ts';
 import { tryCatch } from './utils/promises.ts';
 import { initDir, META_DIR, TEMP_DIR } from './utils/dirs.ts';
 import { ALLOWED_MIME_TYPES } from './utils/formats.ts';
@@ -245,6 +245,27 @@ const server = serve({
         }
 
         return Response.json(meta, { status: 200, headers: CORS_HEADERS });
+      }
+    },
+
+    "/probe/:file_id": {
+      OPTIONS: async () => {
+        return new Response('OK', { headers: CORS_HEADERS });
+      },
+      GET: async (req) => {
+        const fileId = req.params.file_id;
+        if (!fileId) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
+
+        const { data: probeData, error } = await tryCatch(probeFileContent(fileId));
+
+        if (error) {
+          return Response.json(
+            { error: "Could not probe file", details: error.message },
+            { status: 500, headers: CORS_HEADERS }
+          );
+        }
+
+        return Response.json(probeData, { status: 200, headers: CORS_HEADERS });
       }
     },
 
@@ -627,6 +648,7 @@ const server = serve({
   },
   maxRequestBodySize: MAX_FILE_SIZE_UPLOAD,
   development: !!process.env.RAILWAY_PROJECT_ID,
+  idleTimeout: 240,
 });
 
 console.log(`Server started on ${server.url}`);

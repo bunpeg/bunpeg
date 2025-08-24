@@ -323,6 +323,229 @@ export async function generateDashFiles(args: DashType, task: Task) {
   await cleanupFile(localPath);
 }
 
+/**
+ * Similar to the `getFileMetadata` function, this function probes the content of a file and returns its metadata.
+ * However, this functions gathers more information about the streams, keyframes... and as a result it is more expensive to run.
+ * @param fileId The ID of the file to probe.
+ * @returns A promise that resolves to the metadata of the file.
+ */
+export async function probeFileContent(fileId: UserFile['id']) {
+  const file = await getFile(fileId);
+  if (!file) throw new Error(`File ${fileId} not found!`);
+
+  const s3File = spaces.file(file.file_path);
+  if (!(await s3File.exists())) {
+    console.log('probeFileContent - file not found on S3');
+    throw new Error(`S3 File ${file.file_path} not found!`);
+  }
+
+  /**
+   * Uses a separate **dir** and an extra **id** to avoid clashes with other async cleanup functions.
+   */
+  const inputPath = path.join(META_DIR, `${nanoid(8)}_${file.file_path}`);
+  await downloadFromS3ToDisk(file.file_path, inputPath);
+
+  try {
+    // Get comprehensive stream information
+    const streamsProc = Bun.spawn([
+      "ffprobe",
+      "-v", "error",
+      "-show_streams",
+      "-show_format",
+      "-of", "json",
+      inputPath,
+    ], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+
+    await streamsProc.exited;
+
+    if (streamsProc.exitCode !== 0) {
+      const error = await new Response(streamsProc.stderr).text();
+      throw new Error(`ffprobe failed: ${error}`);
+    }
+
+    const streamsResult = await new Response(streamsProc.stdout).json() as any;
+    const streams = streamsResult.streams || [];
+    const format = streamsResult.format || {};
+
+    // Check for audio and video streams
+    const hasAudio = streams.some((s: any) => s.codec_type === 'audio');
+    const hasVideo = streams.some((s: any) => s.codec_type === 'video');
+
+    // Get loudness information for audio streams (EBU R128)
+    const resolveLoudnessInfo = async () => {
+      const loudnessProc = Bun.spawn([
+        "ffmpeg",
+        "-i", inputPath,
+        "-af", "loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json",
+        "-f", "null",
+        "-"
+      ], {
+        stdout: 'pipe',
+        stderr: 'pipe',
+      });
+
+      await loudnessProc.exited;
+      const loudnessOutput = await new Response(loudnessProc.stderr).text();
+
+      // Extract JSON from the loudness output
+      const jsonMatch = loudnessOutput.match(/\{[^}]*"input_i"[^}]*\}/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
+      }
+      return null;
+    };
+
+    let loudnessInfo = null;
+    if (hasAudio) {
+      const { data: __loudnessInfo, error: loudnessError } = await tryCatch(resolveLoudnessInfo());
+      if (loudnessError) {
+        console.warn('Failed to get loudness information:', loudnessError);
+      } else {
+        loudnessInfo = __loudnessInfo;
+      }
+    }
+
+    // Get keyframes for video streams
+    const resolveKeyframes = async () => {
+      const keyframesProc = Bun.spawn([
+        "ffprobe",
+        "-v", "error",
+        "-select_streams", "v:0",
+        "-show_entries", "packet=pts_time,flags",
+        "-of", "csv=print_section=0",
+        inputPath,
+      ], {
+        stdout: 'pipe',
+        stderr: 'pipe',
+      });
+
+      await keyframesProc.exited;
+
+      if (keyframesProc.exitCode === 0) {
+        const keyframesOutput = await new Response(keyframesProc.stdout).text();
+        const lines = keyframesOutput.trim().split('\n');
+        return lines
+          .filter(line => line.includes('K'))  // K flag indicates keyframe
+          .map(line => {
+            const parts = line.split(',');
+            return parseFloat(parts[0] || '0');
+          })
+          .filter(time => !isNaN(time));
+      }
+
+      return null;
+    }
+
+    let keyframes: number[] | null = null;
+    if (hasVideo) {
+      const { data: __keyframes, error: keyFramesError } = await tryCatch(resolveKeyframes());
+      if (keyFramesError) {
+        console.warn('Failed to get keyframes information:', keyFramesError);
+      } else {
+        keyframes = __keyframes;
+      }
+    }
+
+    // Parse and structure the response
+    const videoStreams = streams.filter((s: any) => s.codec_type === 'video');
+    const audioStreams = streams.filter((s: any) => s.codec_type === 'audio');
+    const subtitleStreams = streams.filter((s: any) => s.codec_type === 'subtitle');
+
+    return {
+      streams: {
+        video: videoStreams.map((s: any) => ({
+          index: s.index,
+          codec_name: s.codec_name,
+          codec_long_name: s.codec_long_name,
+          width: s.width,
+          height: s.height,
+          coded_width: s.coded_width,
+          coded_height: s.coded_height,
+          has_b_frames: s.has_b_frames,
+          sample_aspect_ratio: s.sample_aspect_ratio,
+          display_aspect_ratio: s.display_aspect_ratio,
+          pix_fmt: s.pix_fmt,
+          level: s.level,
+          color_range: s.color_range,
+          color_space: s.color_space,
+          color_transfer: s.color_transfer,
+          color_primaries: s.color_primaries,
+          chroma_location: s.chroma_location,
+          field_order: s.field_order,
+          r_frame_rate: s.r_frame_rate,
+          avg_frame_rate: s.avg_frame_rate,
+          time_base: s.time_base,
+          start_pts: s.start_pts,
+          start_time: s.start_time,
+          duration_ts: s.duration_ts,
+          duration: s.duration,
+          bit_rate: s.bit_rate,
+          max_bit_rate: s.max_bit_rate,
+          bits_per_raw_sample: s.bits_per_raw_sample,
+          nb_frames: s.nb_frames,
+          tags: s.tags
+        })),
+        audio: audioStreams.map((s: any) => ({
+          index: s.index,
+          codec_name: s.codec_name,
+          codec_long_name: s.codec_long_name,
+          sample_fmt: s.sample_fmt,
+          sample_rate: s.sample_rate,
+          channels: s.channels,
+          channel_layout: s.channel_layout,
+          bits_per_sample: s.bits_per_sample,
+          r_frame_rate: s.r_frame_rate,
+          avg_frame_rate: s.avg_frame_rate,
+          time_base: s.time_base,
+          start_pts: s.start_pts,
+          start_time: s.start_time,
+          duration_ts: s.duration_ts,
+          duration: s.duration,
+          bit_rate: s.bit_rate,
+          max_bit_rate: s.max_bit_rate,
+          nb_frames: s.nb_frames,
+          tags: s.tags
+        })),
+        subtitle: subtitleStreams.map((s: any) => ({
+          index: s.index,
+          codec_name: s.codec_name,
+          codec_long_name: s.codec_long_name,
+          time_base: s.time_base,
+          start_pts: s.start_pts,
+          start_time: s.start_time,
+          duration_ts: s.duration_ts,
+          duration: s.duration,
+          tags: s.tags
+        }))
+      },
+      format: {
+        nb_streams: format.nb_streams,
+        nb_programs: format.nb_programs,
+        format_name: format.format_name,
+        format_long_name: format.format_long_name,
+        start_time: format.start_time,
+        duration: format.duration,
+        size: format.size,
+        bit_rate: format.bit_rate,
+        probe_score: format.probe_score,
+        tags: format.tags
+      },
+      bitrate: format.bit_rate ? parseInt(format.bit_rate, 10) : null,
+      sampleRate: audioStreams.length > 0 ? audioStreams[0].sample_rate : null,
+      loudness: loudnessInfo,
+      duration: format.duration ? parseFloat(format.duration) : null,
+      keyframes: keyframes,
+      hasAudio,
+      hasVideo
+    };
+  } finally {
+    await cleanupFile(inputPath);
+  }
+}
+
 export async function updateFileMetadata(fileId: UserFile['id']) {
   const { meta, mimeType } = await getFileMetadata(fileId);
   return updateFile(fileId, { mime_type: mimeType, metadata: JSON.stringify(meta) });
@@ -601,7 +824,6 @@ function validateMuxCombination(
     }
   }
 }
-
 
 async function runFFmpeg(args: string[], task: Task) {
   const command = [

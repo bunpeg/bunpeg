@@ -19,25 +19,11 @@ model files {
   /**
    * for videos:
    * ```
-   * {
-   * size: number;
-   * duration: number | null;
-   * bitrate: number | null;
-   * resolution: {
-   * width: number | null;
-   * height: number | null;
-   * }
-   * }
+   * { size: number; duration: number | null; bitrate: number | null; resolution: { width: number | null; height: number | null; } }
    * ```
    * for audio:
    * ```
-   * {
-   * size: number;
-   * duration: number | null;
-   * bitrate: number | null;
-   * sampleRate: number | null;
-   * channels: number | null;
-   * }
+   * { size: number; duration: number | null; bitrate: number | null; sampleRate: number | null; channels: number | null; }
    * ```
    */
   metadata   String?
