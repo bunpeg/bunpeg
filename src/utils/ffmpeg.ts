@@ -232,10 +232,13 @@ export function mergeMedia(args: MergeMediaType, task: Task) {
 }
 
 export async function extractThumbnail(args: ExtractThumbnailType, task: Task) {
-  return handleS3DownAndUpAppend({
+  const outputFile = args.mode === 'replace' ? `${task.code}.${args.image_format}` : `${nanoid(8)}.${args.image_format}`;
+  const s3Operation = args.mode === 'replace' ? handleS3DownAndUpSwap : handleS3DownAndUpAppend;
+  return s3Operation({
     task,
+    outputFile,
     fileIds: [args.file_id],
-    outputFile: `${nanoid(8)}.${args.image_format}`,
+    parentFile: args.parent,
     operation: async ({ inputPaths, outputPath }) => {
       const inputFile = inputPaths[0]!;
       const hasVideo = await checkFileHasVideoStream(inputFile);

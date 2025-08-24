@@ -311,7 +311,6 @@ const server = serve({
         if (!fileId) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
 
         const dbFile = await getFile(fileId);
-        console.log('dbFile', dbFile);
         if (!dbFile) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
 
         const file = spaces.file(dbFile.file_path, { acl: 'public-read' });
@@ -322,7 +321,7 @@ const server = serve({
           await deleteFile(fileId);
         });
 
-        return new Response(file, { status: 200, headers: CORS_HEADERS });
+        return new Response(file);
       }
     },
 
