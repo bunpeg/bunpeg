@@ -28,7 +28,7 @@ The ASR feature uses the existing task queue system with conditional workflows:
 
 Internal ASR operations:
 1. `asr-normalize` - Audio normalization for ASR (assumes audio input)
-2. `asr-analyze` - Silence detection and segment planning  
+2. `asr-analyze` - Silence detection and segment planning
 3. `asr-segment` - Segment creation and manifest generation
 
 ### API Security
@@ -47,7 +47,7 @@ Internal ASR operations:
 export const AsrParams = z.object({
   max_segment_duration: z.number().min(30).max(180).default(120),
   min_segment_duration: z.number().min(10).max(90).default(30),
-  silence_threshold: z.string().default("-40dB"), 
+  silence_threshold: z.string().default("-40dB"),
   silence_duration: z.number().default(0.5),
   mode: mode.default('append'),
   parent: parentId,
@@ -67,7 +67,7 @@ export type AsrNormalizeType = z.infer<typeof AsrNormalizeSchema>;
 export const AsrAnalyzeSchema = z.object({
   file_id: fileId,
   max_segment_duration: z.number(),
-  min_segment_duration: z.number(), 
+  min_segment_duration: z.number(),
   silence_threshold: z.string(),
   silence_duration: z.number(),
   mode: mode.default('append'),
@@ -78,7 +78,7 @@ export type AsrAnalyzeType = z.infer<typeof AsrAnalyzeSchema>;
 export const AsrSegmentSchema = z.object({
   file_id: fileId,
   analysis_file_id: fileId,
-  mode: mode.default('append'), 
+  mode: mode.default('append'),
   parent: parentId,
 });
 export type AsrSegmentType = z.infer<typeof AsrSegmentSchema>;
@@ -104,9 +104,9 @@ export type Operations =
   | AsrSegmentType;
 
 // Add internal ASR operations to OperationName (after existing operations)
-export type OperationName = ChainType['operations'][number]['type'] 
-  | 'add-audio' 
-  | 'merge-media' 
+export type OperationName = ChainType['operations'][number]['type']
+  | 'add-audio'
+  | 'merge-media'
   | 'dash'
   | 'asr-normalize'
   | 'asr-analyze'
@@ -149,18 +149,18 @@ export interface AsrManifest {
  * Detect silence regions in audio file using FFmpeg
  */
 export async function detectSilence(
-  filePath: string, 
-  threshold = "-40dB", 
+  filePath: string,
+  threshold = "-40dB",
   minDur = 0.5
 ): Promise<SilenceEvent[]> {
   const { stderr } = await $`ffmpeg -i ${filePath} -af silencedetect=n=${threshold}:d=${minDur} -f null -`.quiet();
   const lines = stderr.toString().split("\n");
   const events: SilenceEvent[] = [];
-  
+
   for (const line of lines) {
     const startMatch = line.match(/silence_start:\s*([0-9.]+)/);
     const endMatch = line.match(/silence_end:\s*([0-9.]+)/);
-    
+
     if (startMatch) {
       events.push({ type: "start", time: parseFloat(startMatch[1]) });
     }
@@ -168,7 +168,7 @@ export async function detectSilence(
       events.push({ type: "end", time: parseFloat(endMatch[1]) });
     }
   }
-  
+
   return events;
 }
 
@@ -186,34 +186,34 @@ export function planAudioChunks(
     .filter(event => event.type === "start")
     .map(event => event.time)
     .filter(time => time > 5 && time < duration - 5);
-  
+
   const cuts = [0, ...silenceCuts, duration].sort((a, b) => a - b);
   const segments: AudioSegment[] = [];
   let start = 0;
   let index = 0;
-  
+
   for (const cut of cuts) {
     if (cut - start >= minChunk) {
       const end = Math.min(start + maxChunk, cut);
-      segments.push({ 
+      segments.push({
         index,
-        start, 
-        duration: +(end - start).toFixed(3) 
+        start,
+        duration: +(end - start).toFixed(3)
       });
       start = end;
       index++;
     }
   }
-  
+
   // Handle remaining duration
   if (duration - start > 5) {
-    segments.push({ 
+    segments.push({
       index,
-      start, 
-      duration: +(duration - start).toFixed(3) 
+      start,
+      duration: +(duration - start).toFixed(3)
     });
   }
-  
+
   return segments;
 }
 
@@ -265,7 +265,7 @@ import { detectSilence, planAudioChunks, getAudioDuration, createAsrManifest, ty
 export function asrNormalize(args: AsrNormalizeType, task: Task) {
   const outputFile = `${task.code}_normalized.wav`;
   const s3Operation = args.mode === 'replace' ? handleS3DownAndUpSwap : handleS3DownAndUpAppend;
-  
+
   return s3Operation({
     task,
     outputFile,
@@ -273,11 +273,11 @@ export function asrNormalize(args: AsrNormalizeType, task: Task) {
     parentFile: args.parent,
     operation: async ({ inputPaths, outputPath }) => {
       const inputFile = inputPaths[0]!;
-      
+
       // Input should already be audio (either original audio file or extracted from video)
       const hasAudio = await checkFileHasAudioStream(inputFile);
       if (!hasAudio) throw new Error('Expected audio input for ASR normalization');
-      
+
       // Normalize for ASR: mono, 16kHz, EBU R128
       return runFFmpeg([
         "-i", inputFile,
@@ -296,7 +296,7 @@ export function asrNormalize(args: AsrNormalizeType, task: Task) {
 export function asrAnalyze(args: AsrAnalyzeType, task: Task) {
   const outputFile = `${task.code}_analysis.json`;
   const s3Operation = args.mode === 'replace' ? handleS3DownAndUpSwap : handleS3DownAndUpAppend;
-  
+
   return s3Operation({
     task,
     outputFile,
@@ -304,17 +304,17 @@ export function asrAnalyze(args: AsrAnalyzeType, task: Task) {
     parentFile: args.parent,
     operation: async ({ inputPaths, outputPath }) => {
       const inputFile = inputPaths[0]!;
-      
+
       // Get audio duration
       const duration = await getAudioDuration(inputFile);
-      
+
       // Detect silence regions
       const silenceEvents = await detectSilence(
         inputFile,
         args.silence_threshold,
         args.silence_duration
       );
-      
+
       // Plan audio segments
       const segments = planAudioChunks(
         duration,
@@ -322,7 +322,7 @@ export function asrAnalyze(args: AsrAnalyzeType, task: Task) {
         args.min_segment_duration,
         silenceEvents
       );
-      
+
       // Save analysis results
       const analysisData = {
         duration,
@@ -335,9 +335,9 @@ export function asrAnalyze(args: AsrAnalyzeType, task: Task) {
           silence_duration: args.silence_duration
         }
       };
-      
+
       await Bun.write(outputPath, JSON.stringify(analysisData, null, 2));
-      
+
       return { success: true };
     }
   });
@@ -349,7 +349,7 @@ export function asrAnalyze(args: AsrAnalyzeType, task: Task) {
 export function asrSegment(args: AsrSegmentType, task: Task) {
   const outputFile = `${task.code}_manifest.json`;
   const s3Operation = args.mode === 'replace' ? handleS3DownAndUpSwap : handleS3DownAndUpAppend;
-  
+
   return s3Operation({
     task,
     outputFile,
@@ -358,21 +358,21 @@ export function asrSegment(args: AsrSegmentType, task: Task) {
     operation: async ({ inputPaths, outputPath }) => {
       const normalizedAudioPath = inputPaths[0]!;
       const analysisPath = inputPaths[1]!;
-      
+
       // Load analysis results
       const analysisData = JSON.parse(await Bun.file(analysisPath).text());
       const segments: AudioSegment[] = analysisData.segments;
-      
+
       // Create output directory for segments
       const segmentDir = path.dirname(outputPath);
       await mkdir(segmentDir, { recursive: true });
-      
+
       // Create each audio segment
       const segmentFiles: string[] = [];
       for (const segment of segments) {
         const segmentFileName = `seg_${segment.index.toString().padStart(3, '0')}.wav`;
         const segmentPath = path.join(segmentDir, segmentFileName);
-        
+
         await runFFmpeg([
           "-i", normalizedAudioPath,
           "-ss", segment.start.toString(),
@@ -380,10 +380,10 @@ export function asrSegment(args: AsrSegmentType, task: Task) {
           "-c", "copy",  // Copy codec for speed
           segmentPath
         ]);
-        
+
         segmentFiles.push(segmentFileName);
       }
-      
+
       // Create package manifest
       const manifest = createAsrManifest(
         task.code,
@@ -391,10 +391,10 @@ export function asrSegment(args: AsrSegmentType, task: Task) {
         segments,
         "/output" // Base URL for segment access
       );
-      
+
       // Save manifest
       await Bun.write(outputPath, JSON.stringify(manifest, null, 2));
-      
+
       return { success: true, segmentFiles };
     }
   });
@@ -443,23 +443,23 @@ Add the `/asr` endpoint to the routes object:
     const body = await req.json();
     const parsed = AsrSchema.safeParse(body);
     if (!parsed.success) {
-      return new Response(JSON.stringify({ error: parsed.error }), { 
-        status: 400, 
-        headers: CORS_HEADERS 
+      return new Response(JSON.stringify({ error: parsed.error }), {
+        status: 400,
+        headers: CORS_HEADERS
       });
     }
 
     const args = parsed.data;
-    
+
     try {
       let normalizeInputFileId = args.file_id;
-      
+
       // Check if input is video file
       const file = await getFile(args.file_id);
       const filePath = await downloadFromS3ToDisk(file); // Temp download for analysis
       const hasVideo = await checkFileHasVideoStream(filePath);
       await cleanupFile(filePath); // Clean up temp file
-      
+
       if (hasVideo) {
         // Create extract-audio task first for video files
         await createTask(args.file_id, 'extract-audio', {
@@ -468,19 +468,19 @@ Add the `/asr` endpoint to the routes object:
           mode: 'append',
           parent: args.parent,
         });
-        
+
         // Note: Subsequent tasks will reference the extracted audio file
         // This requires file ID chaining system to be implemented
         // For now, using original file_id - needs improvement
       }
-      
+
       // Create ASR-specific tasks
       await createTask(normalizeInputFileId, 'asr-normalize', {
         file_id: normalizeInputFileId,
         mode: 'append',
         parent: args.parent,
       });
-      
+
       // Task 2: Analyze silence (depends on normalized audio)
       await createTask(normalizeInputFileId, 'asr-analyze', {
         file_id: normalizeInputFileId, // This should reference normalized file
@@ -491,7 +491,7 @@ Add the `/asr` endpoint to the routes object:
         mode: 'append',
         parent: args.parent,
       });
-      
+
       // Task 3: Create segments (depends on normalized audio + analysis)
       await createTask(normalizeInputFileId, 'asr-segment', {
         file_id: normalizeInputFileId, // This should reference normalized file
@@ -501,14 +501,14 @@ Add the `/asr` endpoint to the routes object:
       });
 
       return Response.json({ success: true }, { headers: CORS_HEADERS });
-      
+
     } catch (error) {
-      return new Response(JSON.stringify({ 
+      return new Response(JSON.stringify({
         error: "Failed to create ASR tasks",
         details: error instanceof Error ? error.message : String(error)
-      }), { 
-        status: 500, 
-        headers: CORS_HEADERS 
+      }), {
+        status: 500,
+        headers: CORS_HEADERS
       });
     }
   }
@@ -534,7 +534,7 @@ The current implementation has a limitation: sequential tasks need to reference 
 - Provide meaningful error messages for debugging
 - Temporary files are cleaned up even on errors
 
-### Performance Considerations  
+### Performance Considerations
 - Video files require separate extraction task before ASR processing
 - Audio extraction and normalization are handled as separate tasks for better queue distribution
 - Consider timeout values for large files
@@ -588,10 +588,10 @@ curl http://localhost:3000/output/manifest_file_id
 ```
 Processed Files:
 ├── abc123_normalized.wav      # Extracted/normalized mono audio
-├── abc123_analysis.json       # Silence analysis results  
+├── abc123_analysis.json       # Silence analysis results
 ├── abc123_manifest.json       # Package manifest
 ├── seg_000.wav               # First audio segment
-├── seg_001.wav               # Second audio segment  
+├── seg_001.wav               # Second audio segment
 └── ...                       # Additional segments
 ```
 
@@ -599,7 +599,7 @@ Manifest JSON format:
 ```json
 {
   "packageId": "pkg_abc123",
-  "preset": "asr-basic", 
+  "preset": "asr-basic",
   "fileId": "abc123",
   "sampleRate": 16000,
   "channels": 1,
@@ -611,7 +611,7 @@ Manifest JSON format:
       "url": "/output/seg_000.wav"
     },
     {
-      "index": 1, 
+      "index": 1,
       "start": 58.2,
       "duration": 59.9,
       "url": "/output/seg_001.wav"

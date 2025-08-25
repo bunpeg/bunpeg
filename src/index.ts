@@ -1,6 +1,5 @@
 import { $, serve, sql } from 'bun';
 import path from 'path';
-import { rm } from 'node:fs/promises';
 import { nanoid } from 'nanoid';
 import Busboy from 'busboy';
 
