@@ -12,10 +12,14 @@ import {
   handleS3DownAndUpSwap,
   uploadToS3FromDisk,
   spaces,
+  cleanupFiles,
 } from './s3.ts';
 import { tryCatch } from './promises.ts';
 import type {
   AddAudioTrackType,
+  AsrAnalyzeType,
+  AsrNormalizeType,
+  AsrSegmentType,
   AudioCodec,
   AudioFormat,
   CutEndType,
@@ -30,6 +34,7 @@ import type {
   VideoCodec,
   VideoFormat,
 } from './schemas.ts';
+import { detectSilence, planAudioChunks, getAudioDuration, createAsrManifest, type AudioSegment } from './asr.ts';
 
 export function transcode(args: TranscodeType, task: Task) {
   validateMuxCombination(args.format, args.video_codec || null, args.audio_codec || null);
@@ -308,6 +313,170 @@ export async function generateDashFiles(args: DashType, task: Task) {
 
     const segFilePath = path.join(seg.parentPath, seg.name);
     const { error: uploadError } = await tryCatch(uploadToS3FromDisk(segFilePath, `${file.id}/dash/${seg.name}`, { acl: 'public-read' }));
+    if (uploadError) {
+      await cleanupFile(localPath);
+      await rm(segmentsPath, { force: true, recursive: true });
+      throw new Error(`Failed to upload DASH segments for task ${task.id}`);
+    }
+  }
+
+  if (await Bun.file(segmentsPath).exists()) {
+    await rm(segmentsPath, { force: true, recursive: true });
+  }
+
+  await cleanupFile(localPath);
+}
+
+/**
+ * ASR Step 1: Normalize audio for ASR processing (assumes audio input)
+ * This function expects audio input - video files should use extract-audio task first
+ */
+export function asrNormalize(args: AsrNormalizeType, task: Task) {
+  const outputFile = `${task.code}_normalized.wav`;
+
+  return handleS3DownAndUpSwap({
+    task,
+    outputFile,
+    s3UploadPath: `${args.file_id}/asr/normalized.wav`,
+    fileIds: [args.file_id],
+    parentFile: args.parent,
+    operation: async ({ inputPaths, outputPath }) => {
+      const inputFile = inputPaths[0]!;
+
+      // Input should already be audio (either original audio file or extracted from video)
+      const hasAudio = await checkFileHasAudioStream(inputFile);
+      if (!hasAudio) throw new Error('Expected audio input for ASR normalization');
+
+      // Normalize for ASR: mono, 16kHz, EBU R128
+      return runFFmpeg([
+        "-i", inputFile,
+        "-ac", "1",                // Downmix to mono
+        "-ar", "16000",            // 16kHz sample rate
+        "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",  // EBU R128 normalization
+        outputPath
+      ], task);
+    }
+  });
+}
+
+/**
+ * ASR Step 2: Analyze silence and plan segmentation
+ */
+export function asrAnalyze(args: AsrAnalyzeType, task: Task) {
+  const outputFile = `${task.code}_analysis.json`;
+
+  return handleS3DownAndUpAppend({
+    task,
+    outputFile,
+    s3UploadPath: `${args.file_id}/asr/analysis.json`,
+    fileIds: [args.file_id],
+    parentFile: args.parent,
+    operation: async ({ inputPaths, outputPath }) => {
+      const inputFile = inputPaths[0]!;
+
+      // Get audio duration
+      const duration = await getAudioDuration(inputFile);
+
+      // Detect silence regions
+      const silenceEvents = await detectSilence(
+        inputFile,
+        args.silence_threshold,
+        args.silence_duration
+      );
+
+      // Plan audio segments
+      const segments = planAudioChunks(
+        duration,
+        args.max_segment_duration,
+        args.min_segment_duration,
+        silenceEvents
+      );
+
+      // Save analysis results
+      const analysisData = {
+        duration,
+        silenceEvents,
+        segments,
+        parameters: {
+          max_segment_duration: args.max_segment_duration,
+          min_segment_duration: args.min_segment_duration,
+          silence_threshold: args.silence_threshold,
+          silence_duration: args.silence_duration
+        }
+      };
+
+      await Bun.write(outputPath, JSON.stringify(analysisData, null, 2));
+    }
+  });
+}
+
+/**
+ * ASR Step 3: Create audio segments and manifest
+ */
+export async function asrSegment(args: AsrSegmentType, task: Task) {
+  const { data: file, error } = await tryCatch(getFile(args.file_id));
+  if (error || !file) {
+    throw new Error(`Could not find file ${task.file_id}`);
+  }
+
+  const localPath = path.join(TEMP_DIR, file.file_path);
+  const { error: downloadError } = await tryCatch(downloadFromS3ToDisk(file.file_path, localPath));
+  if (downloadError) {
+    logTask(task.id, `Failed to download file ${file.file_path} from S3`);
+    await cleanupFile(localPath);
+    throw downloadError;
+  }
+
+  const analysisPath = path.join(TEMP_DIR, `${file.id}_analysis.json`);
+  const { error: analisysDownloadError } = await tryCatch(downloadFromS3ToDisk(`${file.id}/asr/analysis.json`, analysisPath));
+  if (analisysDownloadError) {
+    logTask(task.id, `Failed to download analysis file ${file.id}/asr/analysis.json from S3`);
+    await cleanupFiles([localPath, analysisPath]);
+    throw downloadError;
+  }
+
+  const segmentsPath = path.join(TEMP_DIR, `${file.id}/asr`);
+  await mkdir(segmentsPath, { recursive: true });
+  const manifestPath = path.join(segmentsPath, 'manifest.json');
+
+  // Load analysis results
+  const analysisData = JSON.parse(await Bun.file(analysisPath).text());
+  const segments: AudioSegment[] = analysisData.segments;
+
+  // Create each audio segment
+  const segmentFiles: string[] = [];
+  for (const segment of segments) {
+    const segmentFileName = `seg_${segment.index.toString().padStart(3, '0')}.wav`;
+    const segmentPath = path.join(segmentsPath, segmentFileName);
+
+    await runFFmpeg([
+      "-i", localPath,
+      "-ss", segment.start.toString(),
+      "-t", segment.duration.toString(),
+      "-c", "copy",  // Copy codec for speed
+      segmentPath
+    ], task);
+
+    segmentFiles.push(segmentFileName);
+  }
+
+  // Create package manifest
+  const manifest = createAsrManifest(
+    task.code,
+    args.file_id,
+    segments,
+    `https://bunpeg.fra1.cdn.digitaloceanspaces.com/${file.id}/asr` // Base URL for segment access
+  );
+
+  // Save manifest
+  await Bun.write(manifestPath, JSON.stringify(manifest, null, 2));
+
+  const segmentedFiles = await readdir(segmentsPath, { withFileTypes: true });
+  for (const seg of segmentedFiles) {
+    if (seg.isDirectory()) continue;
+
+    const segFilePath = path.join(seg.parentPath, seg.name);
+    const { error: uploadError } = await tryCatch(uploadToS3FromDisk(segFilePath, `${file.id}/asr/${seg.name}`, { acl: 'public-read' }));
     if (uploadError) {
       await cleanupFile(localPath);
       await rm(segmentsPath, { force: true, recursive: true });
@@ -850,7 +1019,6 @@ async function runFFmpeg(args: string[], task: Task) {
 
   const usage = proc.resourceUsage();
   if (usage) {
-    // console.log('--------------------------------------------------------------')
     console.log('Resource Usage')
     console.log(`Max memory used: ${usage.maxRSS} bytes`);
     console.log(`CPU time (user): ${usage.cpuTime.user} µs`);

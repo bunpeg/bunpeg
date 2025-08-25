@@ -1,5 +1,6 @@
 import { $, serve, sql } from 'bun';
 import path from 'path';
+import { rm } from 'node:fs/promises';
 import { nanoid } from 'nanoid';
 import Busboy from 'busboy';
 
@@ -17,6 +18,7 @@ import {
 import { checkFilesExist, createFile, deleteFile, getDecendants, getFile } from './utils/files.ts';
 import {
   AddAudioTrackSchema,
+  AsrSchema,
   BulkSchema,
   ChainSchema,
   CutEndSchema,
@@ -199,7 +201,7 @@ const server = serve({
       OPTIONS: async () => {
         return new Response('OK', { headers: CORS_HEADERS });
       },
-      GET: async (req) => {
+      GET: async (req: Bun.BunRequest<"/files/:file_id">) => {
         const fileId = req.params.file_id;
         if (!fileId) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
 
@@ -582,7 +584,7 @@ const server = serve({
         }
 
         await bulkCreateTasks(operations.map(({ type: operation, ...args }) => ({
-          fileId: file_id,
+          file_id,
           operation,
           args: { file_id, ...args },
         })))
@@ -608,10 +610,10 @@ const server = serve({
           return new Response(`One or more files not found`, { status: 404, headers: CORS_HEADERS });
         }
 
-        await bulkCreateTasks(file_ids.map((fileId) => ({
-          fileId,
+        await bulkCreateTasks(file_ids.map((file_id) => ({
+          file_id,
           operation: type,
-          args: { file_id: fileId, ...args },
+          args: { file_id: file_id, ...args },
         })))
 
         return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS });
@@ -632,6 +634,92 @@ const server = serve({
         await createTask(fileId, 'dash', { file_id: fileId });
         return Response.json({ success: true }, { status: 200, headers: CORS_HEADERS })
       },
+    },
+
+    "/asr": {
+      OPTIONS: async () => {
+        return new Response('OK', { headers: CORS_HEADERS });
+      },
+      POST: async (req) => {
+        const body = await req.json();
+        const parsed = AsrSchema.safeParse(body);
+        if (!parsed.success) {
+          return new Response(JSON.stringify({ error: parsed.error }), {
+            status: 400,
+            headers: CORS_HEADERS
+          });
+        }
+
+        const args = parsed.data;
+
+        const file = await getFile(args.file_id);
+        if (!file) return new Response('Invalid file id', { status: 400, headers: CORS_HEADERS });
+
+        const operations = [];
+
+
+        try {
+          if (file.mime_type.startsWith('video/')) {
+            operations.push({
+              operation: 'extract-audio' as Task['operation'],
+              file_id: args.file_id,
+              args: {
+                file_id: args.file_id,
+                audio_format: 'wav',
+                mode: 'replace',
+                parent: args.parent,
+              }
+            });
+          }
+
+          // Create ASR-specific tasks
+          operations.push(
+            {
+              operation: 'asr-normalize' as Task['operation'],
+              file_id: args.file_id,
+              args: {
+                file_id: args.file_id,
+                mode: 'append',
+                parent: args.parent,
+              }
+            },
+            {
+              operation: 'asr-analyze' as Task['operation'],
+              file_id: args.file_id,
+              args: {
+                file_id: args.file_id,
+                max_segment_duration: args.max_segment_duration,
+                min_segment_duration: args.min_segment_duration,
+                silence_threshold: args.silence_threshold,
+                silence_duration: args.silence_duration,
+                parent: args.parent,
+              }
+            },
+            {
+              operation: 'asr-segment' as Task['operation'],
+              file_id: args.file_id,
+              args: {
+                file_id: args.file_id,
+                parent: args.parent,
+              }
+            }
+          );
+
+          // Task 3: Create segments (depends on normalized audio + analysis)
+          await bulkCreateTasks(operations);
+
+          return Response.json({ success: true }, { headers: CORS_HEADERS });
+
+        } catch (error) {
+          return new Response(JSON.stringify({
+            error: "Failed to create ASR tasks",
+            details: error instanceof Error ? error.message : String(error)
+          }), {
+            status: 500,
+            headers: CORS_HEADERS
+          });
+        }
+      }
     },
   },
   fetch() {

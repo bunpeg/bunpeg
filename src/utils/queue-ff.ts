@@ -1,8 +1,10 @@
 import { tryCatch } from './promises.ts';
-import { type UserFile } from './files.ts';
 import { getNextPendingTasks, markPendingTasksForFileAsUnreachable, type Task, updateTask } from './tasks.ts';
 import {
   addAudioTrack,
+  asrAnalyze,
+  asrNormalize,
+  asrSegment,
   cutEnd,
   extractAudio,
   extractThumbnail,
@@ -14,10 +16,19 @@ import {
   trim,
 } from './ffmpeg.ts';
 import {
-  AddAudioTrackSchema, CutEndSchema, DashSchema, ExtractAudioSchema,
+  AddAudioTrackSchema,
+  AsrAnalyzeSchema,
+  AsrNormalizeSchema,
+  AsrSegmentSchema,
+  CutEndSchema,
+  DashSchema,
+  ExtractAudioSchema,
   ExtractThumbnailSchema,
-  MergeMediaSchema, RemoveAudioSchema,
-  ResizeVideoSchema, TranscodeSchema, TrimSchema,
+  MergeMediaSchema,
+  RemoveAudioSchema,
+  ResizeVideoSchema,
+  TranscodeSchema,
+  TrimSchema,
 } from './schemas.ts';
 
 const MAX_CONCURRENT_TASKS = Number(process.env.MAX_CONCURRENT_TASKS);
@@ -155,6 +166,27 @@ async function runOperation(task: Task) {
       if (!parsed.success) throw new Error(`Invalid merge-media args: ${JSON.stringify(parsed.error.issues)}`);
       const args = parsed.data;
       await generateDashFiles(args, task);
+    } break;
+
+    case 'asr-normalize': {
+      const parsed = AsrNormalizeSchema.safeParse(JSON.parse(jsonArgs));
+      if (!parsed.success) throw new Error(`Invalid asr-normalize args: ${JSON.stringify(parsed.error.issues)}`);
+      const args = parsed.data;
+      await asrNormalize({ ...args, file_id: task.file_id }, task);
+    } break;
+
+    case 'asr-analyze': {
+      const parsed = AsrAnalyzeSchema.safeParse(JSON.parse(jsonArgs));
+      if (!parsed.success) throw new Error(`Invalid asr-analyze args: ${JSON.stringify(parsed.error.issues)}`);
+      const args = parsed.data;
+      await asrAnalyze({ ...args, file_id: task.file_id }, task);
+    } break;
+
+    case 'asr-segment': {
+      const parsed = AsrSegmentSchema.safeParse(JSON.parse(jsonArgs));
+      if (!parsed.success) throw new Error(`Invalid asr-segment args: ${JSON.stringify(parsed.error.issues)}`);
+      const args = parsed.data;
+      await asrSegment({ ...args, file_id: task.file_id }, task);
     } break;
 
     default:

@@ -26,6 +26,7 @@ interface Params {
   task: Task;
   fileIds: string[];
   outputFile: string;
+  s3UploadPath?: string;
   parentFile?: string;
   operation: (params: { s3Paths: string[]; inputPaths: string[]; outputPath: string }) => Promise<void>;
 }
@@ -36,7 +37,7 @@ interface Params {
  * This version is for the `replace` mode of operations.
  */
 export async function handleS3DownAndUpSwap(params: Params) {
-  const { task, outputFile, parentFile } = params;
+  const { task, outputFile, s3UploadPath, parentFile } = params;
   const { s3Paths, inputPaths, outputPath } = await __executeS3DownAndUp(params);
 
   const { data: newFileName, error: fileNameError } = await tryCatch(resolveNewFileName(task.file_id, outputFile));
@@ -51,7 +52,7 @@ export async function handleS3DownAndUpSwap(params: Params) {
 
   await updateFile(task.file_id, {
     file_name: newFileName ?? outputFile,
-    file_path: outputFile,
+    file_path: s3UploadPath ?? outputFile,
     ...(data ? {
       mime_type: data.mimeType,
       metadata: JSON.stringify(data.meta),
@@ -75,7 +76,7 @@ export async function handleS3DownAndUpSwap(params: Params) {
  * This version is for the `append` mode of operations.
  */
 export async function handleS3DownAndUpAppend(params: Params) {
-  const { task, outputFile, parentFile } = params;
+  const { task, outputFile, s3UploadPath, parentFile } = params;
   const { inputPaths, outputPath } = await __executeS3DownAndUp(params);
   const newFileId = extractFileName(outputFile);
   const newFile = Bun.file(outputFile);
@@ -85,7 +86,7 @@ export async function handleS3DownAndUpAppend(params: Params) {
   await createFile({
     id: newFileId,
     file_name: newFileName ?? outputFile,
-    file_path: outputFile,
+    file_path: s3UploadPath ?? outputFile,
     mime_type: newFile.type,
     ...(parentFile ? { parent: parentFile } : {})
   });
@@ -103,7 +104,8 @@ export async function handleS3DownAndUpAppend(params: Params) {
  * and the subsequent upload, leaving the cleanup to the caller.
  */
 async function __executeS3DownAndUp(params: Params) {
-  const { task, fileIds, outputFile, operation } = params;
+  const { task, fileIds, outputFile, s3UploadPath: __s3UploadPath, operation } = params;
+  const s3UploadPath = __s3UploadPath ?? outputFile;
 
   const s3Paths: string[] = [];
   const inputPaths: string[] = [];
@@ -138,7 +140,7 @@ async function __executeS3DownAndUp(params: Params) {
     throw operationError;
   }
 
-  const { error: uploadError } = await tryCatch(uploadToS3FromDisk(outputPath, outputFile));
+  const { error: uploadError } = await tryCatch(uploadToS3FromDisk(outputPath, s3UploadPath));
   if (uploadError) {
     logTask(task.id, 'Failed to upload from S3');
     await cleanupFiles([...inputPaths, outputPath]);

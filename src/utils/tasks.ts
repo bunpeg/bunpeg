@@ -56,10 +56,10 @@ export async function createTask(fileId: UserFile['id'], operation: Task['operat
   })}`
 }
 
-export async function bulkCreateTasks(tasks: { fileId: UserFile['id'], operation: Task['operation'], args: Operations }[]) {
+export async function bulkCreateTasks(tasks: { file_id: UserFile['id'], operation: Task['operation'], args: Operations }[]) {
   const dbInput = tasks.map((t) => ({
     code: nanoid(8),
-    file_id: t.fileId,
+    file_id: t.file_id,
     status: 'queued',
     operation: t.operation,
     args: JSON.stringify(t.args),
