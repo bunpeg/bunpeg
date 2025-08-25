@@ -30,7 +30,6 @@ import type {
   VideoCodec,
   VideoFormat,
 } from './schemas.ts';
-import { performance } from 'node:perf_hooks';
 
 export function transcode(args: TranscodeType, task: Task) {
   validateMuxCombination(args.format, args.video_codec || null, args.audio_codec || null);
