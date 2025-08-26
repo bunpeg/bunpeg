@@ -41,6 +41,19 @@ Internal Vision operations:
 
 ### Step 1: Update Schemas (`src/utils/schemas.ts`)
 
+#### Enhance ResizeVideo Schema
+Update existing `ResizeVideoParams` to support FFmpeg auto-scaling:
+
+```typescript
+const ResizeVideoParams = z.object({
+  width: z.number().int().min(-2, 'Width must be positive or -1/-2 for auto-scaling'),
+  height: z.number().int().min(-2, 'Height must be positive or -1/-2 for auto-scaling'),
+  output_format: videoFormat,
+  parent: parentId,
+  mode,
+});
+```
+
 #### Enhance Transcode Schema
 Add optional parameters to existing `TranscodeParams`:
 
@@ -88,7 +101,7 @@ type Operations = {
   "vision-segment": VisionSegmentType;
 };
 
-type OperationName = 
+type OperationName =
   // ... existing operation names
   | "vision-analyze"
   | "vision-segment";
@@ -123,7 +136,7 @@ interface VisionManifest {
 }
 
 async function detectScenes(
-  inputFile: string, 
+  inputFile: string,
   threshold: number,
   task: Task
 ): Promise<SceneEvent[]> {
@@ -132,10 +145,10 @@ async function detectScenes(
     "-vf", `select='gt(scene,${threshold})',showinfo`,
     "-f", "null", "-"
   ];
-  
+
   const result = await runFFmpeg(args, task);
   const scenes: SceneEvent[] = [];
-  
+
   // Parse pts_time from showinfo logs
   const lines = result.stderr.split('\n');
   for (const line of lines) {
@@ -148,7 +161,7 @@ async function detectScenes(
       });
     }
   }
-  
+
   // Always include start (0) and end
   const duration = await getVideoDuration(inputFile);
   if (scenes.length === 0) {
@@ -157,7 +170,7 @@ async function detectScenes(
   if (scenes.length > 200) {
     throw new Error('Too many scenes detected (>200). Consider increasing threshold.');
   }
-  
+
   return [
     { pts_time: 0, score: 1.0 },
     ...scenes,
@@ -167,14 +180,14 @@ async function detectScenes(
 
 function planVisionChunks(scenes: SceneEvent[]): Array<{start: number, end: number}> {
   const chunks: Array<{start: number, end: number}> = [];
-  
+
   for (let i = 0; i < scenes.length - 1; i++) {
     chunks.push({
       start: scenes[i].pts_time,
       end: scenes[i + 1].pts_time
     });
   }
-  
+
   return chunks;
 }
 
@@ -239,20 +252,23 @@ export function transcode(args: TranscodeType, task: Task) {
 
 #### Add Vision Processing Functions
 ```typescript
-function visionAnalyze(args: VisionAnalyzeType, task: Task) {
+export function visionAnalyze(args: VisionAnalyzeType, task: Task) {
+  const outputFile = `${task.code}_analysis.json`;
+
   return handleS3DownAndUpAppend({
     task,
-    outputFile: `${nanoid(8)}.json`,
+    outputFile,
+    s3UploadPath: `${args.file_id}/vision/analysis.json`,
     fileIds: [args.file_id],
     parentFile: args.parent,
     operation: async ({ inputPaths, outputPath }) => {
       const inputFile = inputPaths[0]!;
       const hasVideo = await checkFileHasVideoStream(inputFile);
       if (!hasVideo) throw new Error('File has no video track');
-      
+
       const scenes = await detectScenes(inputFile, args.scene_threshold, task);
       const chunks = planVisionChunks(scenes);
-      
+
       // Store analysis results
       const analysisData = {
         scenes,
@@ -260,76 +276,111 @@ function visionAnalyze(args: VisionAnalyzeType, task: Task) {
         threshold: args.scene_threshold,
         totalScenes: scenes.length - 2 // Exclude start/end markers
       };
-      
+
       await writeFile(outputPath, JSON.stringify(analysisData, null, 2));
     },
   });
 }
 
-function visionSegment(args: VisionSegmentType, task: Task) {
-  return handleS3DownAndUpMultiple({
-    task,
-    outputFiles: [], // Will be populated dynamically
-    fileIds: [args.file_id],
-    parentFile: args.parent,
-    operation: async ({ inputPaths, outputPaths, addOutputFile }) => {
-      const [videoFile, analysisFile] = inputPaths;
-      
-      // Read analysis data
-      const analysisData = JSON.parse(await readFile(analysisFile!, 'utf8'));
-      const chunks = analysisData.chunks;
-      
-      if (chunks.length > 200) {
-        throw new Error('Too many scenes to segment (>200)');
-      }
-      
-      // Create segments
-      const segments: VisionSegment[] = [];
-      const segmentPromises = chunks.map(async (chunk: any, index: number) => {
-        const outputFile = `scene_${index.toString().padStart(3, '0')}.mp4`;
-        const outputPath = await addOutputFile(outputFile);
-        
-        const duration = chunk.end - chunk.start;
-        if (duration <= 0) return null;
-        
-        await runFFmpeg([
-          "-i", videoFile!,
-          "-ss", chunk.start.toString(),
-          "-to", chunk.end.toString(),
-          "-c", "copy", // Copy codec for speed
-          outputPath
-        ], task);
-        
-        return {
-          index,
-          start: chunk.start,
-          duration,
-          url: `${task.code}/${outputFile}`
-        };
-      });
-      
-      const results = await Promise.all(segmentPromises);
-      const validSegments = results.filter(Boolean) as VisionSegment[];
-      
-      // Get video metadata for manifest
-      const resolution = await getVideoResolution(videoFile!);
-      const totalDuration = await getVideoDuration(videoFile!);
-      
-      // Create manifest
-      const manifest = createVisionManifest(
-        task.code,
-        args.file_id,
-        validSegments,
-        resolution,
-        totalDuration,
-        analysisData.threshold
-      );
-      
-      // Save manifest
-      const manifestPath = await addOutputFile('manifest.json');
-      await writeFile(manifestPath, JSON.stringify(manifest, null, 2));
-    },
-  });
+export async function visionSegment(args: VisionSegmentType, task: Task) {
+  const { data: file, error } = await tryCatch(getFile(args.file_id));
+  if (error || !file) {
+    throw new Error(`Could not find file ${task.file_id}`);
+  }
+
+  const localPath = path.join(TEMP_DIR, file.file_path);
+  const { error: downloadError } = await tryCatch(downloadFromS3ToDisk(file.file_path, localPath));
+  if (downloadError) {
+    logTask(task.id, `Failed to download file ${file.file_path} from S3`);
+    await cleanupFile(localPath);
+    throw downloadError;
+  }
+
+  const analysisPath = path.join(TEMP_DIR, `${file.id}_analysis.json`);
+  const { error: analysisDownloadError } = await tryCatch(downloadFromS3ToDisk(`${file.id}/vision/analysis.json`, analysisPath));
+  if (analysisDownloadError) {
+    logTask(task.id, `Failed to download analysis file ${file.id}/vision/analysis.json from S3`);
+    await cleanupFiles([localPath, analysisPath]);
+    throw analysisDownloadError;
+  }
+
+  const segmentsPath = path.join(TEMP_DIR, `${file.id}/vision`);
+  await mkdir(segmentsPath, { recursive: true });
+  const manifestPath = path.join(segmentsPath, 'manifest.json');
+
+  // Load analysis results
+  const analysisData = JSON.parse(await Bun.file(analysisPath).text());
+  const chunks = analysisData.chunks;
+
+  if (chunks.length > 200) {
+    throw new Error('Too many scenes to segment (>200)');
+  }
+
+  // Create each scene segment
+  const segmentFiles: string[] = [];
+  const segments: VisionSegment[] = [];
+
+  for (let index = 0; index < chunks.length; index++) {
+    const chunk = chunks[index];
+    const duration = chunk.end - chunk.start;
+
+    if (duration <= 0) continue;
+
+    const segmentFileName = `scene_${index.toString().padStart(3, '0')}.mp4`;
+    const segmentPath = path.join(segmentsPath, segmentFileName);
+
+    await runFFmpeg([
+      "-i", localPath,
+      "-ss", chunk.start.toString(),
+      "-to", chunk.end.toString(),
+      "-c", "copy", // Copy codec for speed
+      segmentPath
+    ], task);
+
+    segmentFiles.push(segmentFileName);
+    segments.push({
+      index,
+      start: chunk.start,
+      duration,
+      url: `https://bunpeg.fra1.cdn.digitaloceanspaces.com/${file.id}/vision/${segmentFileName}`
+    });
+  }
+
+  // Get video metadata for manifest
+  const resolution = await getVideoResolution(localPath);
+  const totalDuration = await getVideoDuration(localPath);
+
+  // Create package manifest
+  const manifest = createVisionManifest(
+    task.code,
+    args.file_id,
+    segments,
+    resolution,
+    totalDuration,
+    analysisData.threshold
+  );
+
+  // Save manifest
+  await Bun.write(manifestPath, JSON.stringify(manifest, null, 2));
+
+  const segmentedFiles = await readdir(segmentsPath, { withFileTypes: true });
+  for (const seg of segmentedFiles) {
+    if (seg.isDirectory()) continue;
+
+    const segFilePath = path.join(seg.parentPath, seg.name);
+    const { error: uploadError } = await tryCatch(uploadToS3FromDisk(segFilePath, `${file.id}/vision/${seg.name}`, { acl: 'public-read' }));
+    if (uploadError) {
+      await cleanupFile(localPath);
+      await rm(segmentsPath, { force: true, recursive: true });
+      throw new Error(`Failed to upload vision segments for task ${task.id}`);
+    }
+  }
+
+  if (await Bun.file(segmentsPath).exists()) {
+    await rm(segmentsPath, { force: true, recursive: true });
+  }
+
+  await cleanupFile(localPath);
 }
 ```
 
@@ -348,78 +399,81 @@ case "vision-segment":
 ### Step 5: Add API Endpoint (`src/index.ts`)
 
 ```typescript
-app.post("/vision", async (c) => {
-  const body = await c.req.json().catch(() => ({}));
-  const parsed = VisionSchema.safeParse(body);
-  if (!parsed.success) {
-    return c.json({ error: "Invalid parameters", details: parsed.error.issues }, 400);
+"/vision": {
+  OPTIONS: async () => {
+    return new Response('OK', { headers: CORS_HEADERS });
+  },
+  POST: async (req) => {
+    const body = await req.json();
+    const parsed = VisionSchema.safeParse(body);
+    if (!parsed.success) {
+      return new Response(JSON.stringify({ error: parsed.error }), {
+        status: 400,
+        headers: CORS_HEADERS
+      });
+    }
+
+    const args = parsed.data;
+
+    const file = await getFile(args.file_id);
+    if (!file) return new Response('Invalid file id', { status: 400, headers: CORS_HEADERS });
+
+    await bulkCreateTasks([
+      {
+        operation: 'resize-video' as Task['operation'],
+        file_id: args.file_id,
+        args: {
+          file_id: args.file_id,
+          width: -2,
+          height: 720,
+          output_format: 'mp4' as VideoFormat,
+          parent: args.parent,
+          mode: 'append',
+        }
+      },
+      {
+        operation: 'transcode' as Task['operation'],
+        file_id: args.file_id,
+        args: {
+          file_id: args.file_id,
+          format: 'mp4',
+          video_codec: 'h264',
+          audio_codec: 'aac',
+          preset: 'veryfast',
+          crf: 23,
+          audio_bitrate: '128k',
+          parent: args.parent,
+          mode: 'append',
+        }
+      },
+      {
+        operation: 'vision-analyze' as Task['operation'],
+        file_id: args.file_id,
+        args: {
+          file_id: args.file_id,
+          scene_threshold: args.scene_threshold,
+          parent: args.parent,
+        }
+      },
+      {
+        operation: 'vision-segment' as Task['operation'],
+        file_id: args.file_id,
+        args: {
+          file_id: args.file_id,
+          parent: args.parent,
+        }
+      }
+    ]);
+
+    return Response.json({ success: true }, { headers: CORS_HEADERS });
   }
-
-  const args = parsed.data;
-  const hasVideo = await checkFileHasVideoStreamS3(args.file_id);
-  if (!hasVideo) {
-    return c.json({ error: "File has no video track" }, 400);
-  }
-
-  // Create task sequence
-  const tasks: Task[] = [];
-  
-  // Step 1: Resize to 720p
-  const resizeTask = await createTask("resize-video", {
-    file_id: args.file_id,
-    width: -2,
-    height: 720,
-    output_format: "mp4" as VideoFormat,
-    parent: args.parent,
-    mode: "append" as const
-  });
-  tasks.push(resizeTask);
-  
-  // Step 2: Transcode with VLM settings
-  const transcodeTask = await createTask("transcode", {
-    file_id: resizeTask.code,
-    format: "mp4" as VideoFormat,
-    video_codec: "h264" as VideoCodec,
-    audio_codec: "aac" as AudioCodec,
-    preset: "veryfast",
-    crf: 23,
-    audio_bitrate: "128k",
-    parent: args.parent,
-    mode: "append" as const
-  });
-  tasks.push(transcodeTask);
-  
-  // Step 3: Analyze scenes
-  const analyzeTask = await createTask("vision-analyze", {
-    file_id: transcodeTask.code,
-    scene_threshold: args.scene_threshold,
-    parent: args.parent
-  });
-  tasks.push(analyzeTask);
-  
-  // Step 4: Create segments
-  const segmentTask = await createTask("vision-segment", {
-    file_id: [transcodeTask.code, analyzeTask.code], // Both video and analysis
-    parent: args.parent
-  });
-  tasks.push(segmentTask);
-
-  return c.json({
-    tasks: tasks.map(task => ({
-      id: task.id,
-      code: task.code,
-      operation: task.operation,
-      status: task.status
-    })),
-    package_id: segmentTask.code
-  });
-});
+},
 ```
 
 ## Implementation Notes
 
 ### Leveraging Existing Functionality
-- Uses existing `resize-video` operation without modification
+- Enhances existing `resize-video` operation to support FFmpeg auto-scaling (-1, -2 values)
 - Enhances existing `transcode` operation with optional VLM-specific parameters
 - Reuses existing helpers like `checkFileHasVideoStream()` and `runFFmpeg()`
 - Maximum separation of concerns and code reuse
@@ -479,21 +533,21 @@ curl -X POST http://localhost:3000/vision \
       "status": "queued"
     },
     {
-      "id": "task_002", 
+      "id": "task_002",
       "code": "transcode_code",
       "operation": "transcode",
       "status": "queued"
     },
     {
       "id": "task_003",
-      "code": "analyze_code", 
+      "code": "analyze_code",
       "operation": "vision-analyze",
       "status": "queued"
     },
     {
       "id": "task_004",
       "code": "segment_code",
-      "operation": "vision-segment", 
+      "operation": "vision-segment",
       "status": "queued"
     }
   ],
@@ -524,7 +578,7 @@ The vision processing generates a package containing scene segments and metadata
       "url": "segment_code/scene_000.mp4"
     },
     {
-      "index": 1, 
+      "index": 1,
       "start": 15.2,
       "duration": 22.8,
       "url": "segment_code/scene_001.mp4"
