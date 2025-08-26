@@ -220,7 +220,7 @@ const server = serve({
       OPTIONS: async () => {
         return new Response('OK', { headers: CORS_HEADERS });
       },
-      GET: async (req) => {
+      GET: async (req: Bun.BunRequest<"/url/:file_id">) => {
         const fileId = req.params.file_id;
         if (!fileId) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
 
@@ -720,6 +720,22 @@ const server = serve({
         }
       }
     },
+
+    "/asr/:file_id/manifest": {
+      OPTIONS: async () => {
+        return new Response('OK', { headers: CORS_HEADERS });
+      },
+      GET: async (req) => {
+        const file_id = req.params.file_id;
+        if (!file_id) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
+
+        const db_file = await getFile(file_id);
+        if (!db_file) return new Response('Invalid file id', { status: 400, headers: CORS_HEADERS });
+
+        const s3_manifest = spaces.file(`${db_file.id}/asr/manifest.json`, { acl: 'public-read' });
+        return new Response(s3_manifest);
+      }
+    }
   },
   fetch() {
     return new Response("Hello from bunpeg!");
