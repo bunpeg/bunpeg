@@ -14,6 +14,8 @@ import {
   resizeVideo,
   transcode,
   trim,
+  visionAnalyze,
+  visionSegment,
 } from './ffmpeg.ts';
 import {
   AddAudioTrackSchema,
@@ -29,6 +31,8 @@ import {
   ResizeVideoSchema,
   TranscodeSchema,
   TrimSchema,
+  VisionAnalyzeSchema,
+  VisionSegmentSchema,
 } from './schemas.ts';
 
 const MAX_CONCURRENT_TASKS = Number(process.env.MAX_CONCURRENT_TASKS);
@@ -187,6 +191,20 @@ async function runOperation(task: Task) {
       if (!parsed.success) throw new Error(`Invalid asr-segment args: ${JSON.stringify(parsed.error.issues)}`);
       const args = parsed.data;
       await asrSegment({ ...args, file_id: task.file_id }, task);
+    } break;
+
+    case 'vision-analyze': {
+      const parsed = VisionAnalyzeSchema.safeParse(JSON.parse(jsonArgs));
+      if (!parsed.success) throw new Error(`Invalid vision-analyze args: ${JSON.stringify(parsed.error.issues)}`);
+      const args = parsed.data;
+      await visionAnalyze({ ...args, file_id: task.file_id }, task);
+    } break;
+
+    case 'vision-segment': {
+      const parsed = VisionSegmentSchema.safeParse(JSON.parse(jsonArgs));
+      if (!parsed.success) throw new Error(`Invalid vision-segment args: ${JSON.stringify(parsed.error.issues)}`);
+      const args = parsed.data;
+      await visionSegment({ ...args, file_id: task.file_id }, task);
     } break;
 
     default:

@@ -28,6 +28,7 @@ import {
   ResizeVideoSchema,
   TranscodeSchema,
   TrimSchema,
+  VisionSchema,
 } from './utils/schemas.ts';
 import { startFFQueue } from './utils/queue-ff.ts';
 import { after, startBgQueue } from './utils/queue-bg.ts';
@@ -733,6 +734,107 @@ const server = serve({
         if (!db_file) return new Response('Invalid file id', { status: 400, headers: CORS_HEADERS });
 
         const s3_manifest = spaces.file(`${db_file.id}/asr/manifest.json`, { acl: 'public-read' });
+        return new Response(s3_manifest);
+      }
+    },
+
+    "/vision": {
+      OPTIONS: async () => {
+        return new Response('OK', { headers: CORS_HEADERS });
+      },
+      POST: async (req) => {
+        const body = await req.json();
+        const parsed = VisionSchema.safeParse(body);
+        if (!parsed.success) {
+          return new Response(JSON.stringify({ error: parsed.error }), {
+            status: 400,
+            headers: CORS_HEADERS
+          });
+        }
+
+        const args = parsed.data;
+
+        const file = await getFile(args.file_id);
+        if (!file) return new Response('Invalid file id', { status: 400, headers: CORS_HEADERS });
+
+        const operations = [];
+
+        try {
+          operations.push(
+            {
+              operation: 'resize-video' as Task['operation'],
+              file_id: args.file_id,
+              args: {
+                file_id: args.file_id,
+                width: -2,
+                height: 720,
+                output_format: 'mp4',
+                parent: args.parent,
+                mode: 'replace',
+              }
+            },
+            {
+              operation: 'transcode' as Task['operation'],
+              file_id: args.file_id,
+              args: {
+                file_id: args.file_id,
+                format: 'mp4',
+                video_codec: 'h264',
+                audio_codec: 'aac',
+                preset: 'veryfast',
+                crf: 23,
+                audio_bitrate: '128k',
+                parent: args.parent,
+                mode: 'replace',
+              }
+            },
+            {
+              operation: 'vision-analyze' as Task['operation'],
+              file_id: args.file_id,
+              args: {
+                file_id: args.file_id,
+                scene_threshold: args.scene_threshold,
+                parent: args.parent,
+              }
+            },
+            {
+              operation: 'vision-segment' as Task['operation'],
+              file_id: args.file_id,
+              args: {
+                file_id: args.file_id,
+                parent: args.parent,
+              }
+            }
+          );
+
+          await bulkCreateTasks(operations);
+
+          return Response.json({ success: true }, { headers: CORS_HEADERS });
+
+        } catch (error) {
+          return new Response(JSON.stringify({
+            error: "Failed to create vision tasks",
+            details: error instanceof Error ? error.message : String(error)
+          }), {
+            status: 500,
+            headers: CORS_HEADERS
+          });
+        }
+      }
+    },
+
+    "/vision/:file_id/manifest": {
+      OPTIONS: async () => {
+        return new Response('OK', { headers: CORS_HEADERS });
+      },
+      GET: async (req) => {
+        const file_id = req.params.file_id;
+        if (!file_id) return new Response("Invalid file id", { status: 400, headers: CORS_HEADERS });
+
+        const db_file = await getFile(file_id);
+        if (!db_file) return new Response('Invalid file id', { status: 400, headers: CORS_HEADERS });
+
+        const s3_manifest = spaces.file(`${db_file.id}/vision/manifest.json`, { acl: 'public-read' });
         return new Response(s3_manifest);
       }
     }

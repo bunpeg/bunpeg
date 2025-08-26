@@ -33,7 +33,15 @@ import type {
   TrimType,
   VideoCodec,
   VideoFormat,
+  VisionAnalyzeType,
+  VisionSegmentType,
 } from './schemas.ts';
+import {
+  detectScenes,
+  planVisionChunks,
+  createVisionManifest,
+  type VisionSegment
+} from './vision.ts';
 import { detectSilence, planAudioChunks, getAudioDuration, createAsrManifest, type AudioSegment } from './asr.ts';
 
 export function transcode(args: TranscodeType, task: Task) {
@@ -51,12 +59,17 @@ export function transcode(args: TranscodeType, task: Task) {
       const hasVideo = await checkFileHasVideoStream(inputFile);
       if (!hasVideo) throw new Error('File has no video track');
 
-      return runFFmpeg([
+      const ffmpegArgs = [
         "-i", inputFile,
         ...(args.video_codec ? ["-c:v", args.video_codec] : []),
         ...(args.audio_codec ? ["-c:a", args.audio_codec] : []),
+        ...(args.preset ? ["-preset", args.preset] : []),
+        ...(args.crf ? ["-crf", args.crf.toString()] : []),
+        ...(args.audio_bitrate ? ["-b:a", args.audio_bitrate] : []),
         outputPath,
-      ], task);
+      ];
+
+      return runFFmpeg(ffmpegArgs, task);
     },
   });
 }
@@ -498,6 +511,143 @@ export async function asrSegment(args: AsrSegmentType, task: Task) {
 }
 
 /**
+ * Vision Step 1: Analyze scenes and plan segmentation
+ */
+export function visionAnalyze(args: VisionAnalyzeType, task: Task) {
+  const outputFile = `${task.code}_analysis.json`;
+
+  return handleS3DownAndUpAppend({
+    task,
+    outputFile,
+    s3UploadPath: `${args.file_id}/vision/analysis.json`,
+    fileIds: [args.file_id],
+    parentFile: args.parent,
+    operation: async ({ inputPaths, outputPath }) => {
+      const inputFile = inputPaths[0]!;
+      const hasVideo = await checkFileHasVideoStream(inputFile);
+      if (!hasVideo) throw new Error('File has no video track');
+
+      const scenes = await detectScenes(inputFile, args.scene_threshold);
+      const chunks = planVisionChunks(scenes);
+
+      // Store analysis results
+      const analysisData = {
+        scenes,
+        chunks,
+        threshold: args.scene_threshold,
+        totalScenes: scenes.length - 2 // Exclude start/end markers
+      };
+
+      await Bun.write(outputPath, JSON.stringify(analysisData, null, 2));
+    },
+  });
+}
+
+/**
+ * Vision Step 2: Create scene segments and manifest
+ */
+export async function visionSegment(args: VisionSegmentType, task: Task) {
+  const { data: file, error } = await tryCatch(getFile(args.file_id));
+  if (error || !file) {
+    throw new Error(`Could not find file ${task.file_id}`);
+  }
+
+  const localPath = path.join(TEMP_DIR, file.file_path);
+  const { error: downloadError } = await tryCatch(downloadFromS3ToDisk(file.file_path, localPath));
+  if (downloadError) {
+    logTask(task.id, `Failed to download file ${file.file_path} from S3`);
+    await cleanupFile(localPath);
+    throw downloadError;
+  }
+
+  const analysisPath = path.join(TEMP_DIR, `${file.id}_analysis.json`);
+  const { error: analysisDownloadError } = await tryCatch(downloadFromS3ToDisk(`${file.id}/vision/analysis.json`, analysisPath));
+  if (analysisDownloadError) {
+    logTask(task.id, `Failed to download analysis file ${file.id}/vision/analysis.json from S3`);
+    await cleanupFiles([localPath, analysisPath]);
+    throw analysisDownloadError;
+  }
+
+  const segmentsPath = path.join(TEMP_DIR, `${file.id}/vision`);
+  await mkdir(segmentsPath, { recursive: true });
+  const manifestPath = path.join(segmentsPath, 'manifest.json');
+
+  // Load analysis results
+  const analysisData = JSON.parse(await Bun.file(analysisPath).text());
+  const chunks = analysisData.chunks;
+
+  if (chunks.length > 200) {
+    throw new Error('Too many scenes to segment (>200)');
+  }
+
+  // Create each scene segment
+  const segmentFiles: string[] = [];
+  const segments: VisionSegment[] = [];
+
+  for (let index = 0; index < chunks.length; index++) {
+    const chunk = chunks[index];
+    const duration = chunk.end - chunk.start;
+
+    if (duration <= 0) continue;
+
+    const segmentFileName = `scene_${index.toString().padStart(3, '0')}.mp4`;
+    const segmentPath = path.join(segmentsPath, segmentFileName);
+
+    await runFFmpeg([
+      "-i", localPath,
+      "-ss", chunk.start.toString(),
+      "-to", chunk.end.toString(),
+      "-c", "copy", // Copy codec for speed
+      segmentPath
+    ], task);
+
+    segmentFiles.push(segmentFileName);
+    segments.push({
+      index,
+      start: chunk.start,
+      duration,
+      url: `https://bunpeg.fra1.cdn.digitaloceanspaces.com/${file.id}/vision/${segmentFileName}`
+    });
+  }
+
+  // Get video metadata for manifest
+  const resolution = await getVideoResolution(localPath);
+  const totalDuration = await getVideoDuration(localPath);
+
+  // Create package manifest
+  const manifest = createVisionManifest(
+    task.code,
+    args.file_id,
+    segments,
+    resolution,
+    totalDuration,
+    analysisData.threshold
+  );
+
+  // Save manifest
+  await Bun.write(manifestPath, JSON.stringify(manifest, null, 2));
+
+  const segmentedFiles = await readdir(segmentsPath, { withFileTypes: true });
+  for (const seg of segmentedFiles) {
+    if (seg.isDirectory()) continue;
+
+    const segFilePath = path.join(seg.parentPath, seg.name);
+    const { error: uploadError } = await tryCatch(uploadToS3FromDisk(segFilePath, `${file.id}/vision/${seg.name}`, { acl: 'public-read' }));
+    if (uploadError) {
+      await cleanupFile(localPath);
+      await rm(segmentsPath, { force: true, recursive: true });
+      throw new Error(`Failed to upload vision segments for task ${task.id}`);
+    }
+  }
+
+  if (await Bun.file(segmentsPath).exists()) {
+    await rm(segmentsPath, { force: true, recursive: true });
+  }
+
+  await cleanupFile(localPath);
+}
+
+/**
  * Similar to the `getFileMetadata` function, this function probes the content of a file and returns its metadata.
  * However, this functions gathers more information about the streams, keyframes... and as a result it is more expensive to run.
  * @param fileId The ID of the file to probe.
@@ -781,6 +931,19 @@ export async function getLocalFileMetadata(filePath: string) {
 async function getVideoDuration(filePath: string) {
   const response = await $`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${filePath}"`;
   return parseFloat(response.text().trim());
+}
+
+async function getVideoResolution(filePath: string): Promise<{ width: number, height: number }> {
+  const response = await $`ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "${filePath}"`;
+  const [widthStr, heightStr] = response.text().trim().split('x');
+  const width = Number(widthStr);
+  const height = Number(heightStr);
+
+  if (isNaN(width) || isNaN(height)) {
+    throw new Error('Failed to get video resolution from ffprobe');
+  }
+
+  return { width, height };
 }
 
 async function getVideoMetadata(inputPath: string) {

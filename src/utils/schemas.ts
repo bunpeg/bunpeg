@@ -55,6 +55,9 @@ const TranscodeParams = z.object({
   format: videoFormat,
   video_codec: videoCodec.optional(),
   audio_codec: audioCodec.optional(),
+  preset: z.string().optional(), // H.264 preset (e.g., "veryfast")
+  crf: z.number().int().min(0).max(51).optional(), // Quality setting
+  audio_bitrate: z.string().optional(), // Audio bitrate (e.g., "128k")
   parent: parentId,
   mode,
 });
@@ -62,8 +65,8 @@ export const TranscodeSchema = TranscodeParams.extend({ file_id: fileId });
 export type TranscodeType = z.infer<typeof TranscodeSchema>;
 
 const ResizeVideoParams = z.object({
-  width: z.number().int().min(1, 'Width required'),
-  height: z.number().int().min(1, 'Height required'),
+  width: z.number().int().min(-2, 'Width must be positive or -1/-2 for auto-scaling'),
+  height: z.number().int().min(-2, 'Height must be positive or -1/-2 for auto-scaling'),
   output_format: videoFormat,
   parent: parentId,
   mode,
@@ -173,6 +176,29 @@ export const AsrSegmentSchema = z.object({
 });
 export type AsrSegmentType = z.infer<typeof AsrSegmentSchema>;
 
+// Vision Chunks schemas
+export const VisionParams = z.object({
+  scene_threshold: z.number().min(0).max(1).default(0.4),
+  parent: parentId,
+});
+
+export const VisionSchema = VisionParams.extend({ file_id: fileId });
+export type VisionType = z.infer<typeof VisionSchema>;
+
+// Internal Vision operation schemas (NOT exposed to users)
+export const VisionAnalyzeSchema = z.object({
+  file_id: fileId,
+  scene_threshold: z.number().min(0).max(1),
+  parent: parentId,
+});
+export type VisionAnalyzeType = z.infer<typeof VisionAnalyzeSchema>;
+
+export const VisionSegmentSchema = z.object({
+  file_id: fileId,
+  parent: parentId,
+});
+export type VisionSegmentType = z.infer<typeof VisionSegmentSchema>;
+
 // Union for chained operation
 export const ChainOperationSchema = z.union([
   TrimParams.extend({ type: z.literal("trim") }),
@@ -211,6 +237,8 @@ export type Operations =
   | DashType
   | AsrNormalizeType
   | AsrAnalyzeType
-  | AsrSegmentType;
+  | AsrSegmentType
+  | VisionAnalyzeType
+  | VisionSegmentType;
 
-export type OperationName = ChainType['operations'][number]['type'] | 'add-audio' | 'merge-media' | 'dash' | 'asr-normalize' | 'asr-analyze' | 'asr-segment';
+export type OperationName = ChainType['operations'][number]['type'] | 'add-audio' | 'merge-media' | 'dash' | 'asr-normalize' | 'asr-analyze' | 'asr-segment' | 'vision-analyze' | 'vision-segment';
