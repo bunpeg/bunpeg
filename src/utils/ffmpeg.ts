@@ -470,6 +470,12 @@ export async function asrSegment(args: AsrSegmentType, task: Task) {
 
   // Save manifest
   await Bun.write(manifestPath, JSON.stringify(manifest, null, 2));
+  const { error: manifestUploadError } = await tryCatch(uploadToS3FromDisk(manifestPath, `${file.id}/asr/manifest.json`, { acl: 'public-read' }));
+  if (manifestUploadError) {
+    await cleanupFiles([localPath, analysisPath, manifestPath]);
+    await rm(segmentsPath, { force: true, recursive: true });
+    throw new Error(`Failed to upload ASR manifest for task ${task.id}`);
+  }
 
   const segmentedFiles = await readdir(segmentsPath, { withFileTypes: true });
   for (const seg of segmentedFiles) {
@@ -478,9 +484,9 @@ export async function asrSegment(args: AsrSegmentType, task: Task) {
     const segFilePath = path.join(seg.parentPath, seg.name);
     const { error: uploadError } = await tryCatch(uploadToS3FromDisk(segFilePath, `${file.id}/asr/${seg.name}`, { acl: 'public-read' }));
     if (uploadError) {
-      await cleanupFile(localPath);
+      await cleanupFiles([localPath, analysisPath, manifestPath]);
       await rm(segmentsPath, { force: true, recursive: true });
-      throw new Error(`Failed to upload DASH segments for task ${task.id}`);
+      throw new Error(`Failed to upload ASR segments for task ${task.id}`);
     }
   }
 
