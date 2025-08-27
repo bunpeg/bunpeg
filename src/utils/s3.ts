@@ -1,5 +1,6 @@
 import { S3Client } from 'bun';
 import path from 'path';
+import { mkdir } from 'node:fs/promises';
 import { logTask, type Task } from './tasks.ts';
 import { createFile, getFile, updateFile, type UserFile } from './files.ts';
 import { TEMP_DIR } from './dirs.ts';
@@ -15,6 +16,8 @@ export const spaces = new S3Client({
 });
 
 export async function downloadFromS3ToDisk(s3Path: string, localPath: string) {
+  const dir = path.dirname(localPath);
+  await mkdir(dir, { recursive: true });
   await Bun.write(localPath, spaces.file(s3Path));
 }
 
@@ -113,9 +116,7 @@ async function __executeS3DownAndUp(params: Params) {
 
   for (const fileId of fileIds) {
     const { data: file, error } = await tryCatch(getFile(fileId));
-    if (error || !file) {
-      throw new Error(`Could not find file ${fileId}`);
-    }
+    if (error || !file) throw new Error(`Could not find file ${fileId}`);
 
     s3Paths.push(file.file_path);
   }

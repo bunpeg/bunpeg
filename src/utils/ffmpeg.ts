@@ -345,7 +345,7 @@ export async function generateDashFiles(args: DashType, task: Task) {
  * This function expects audio input - video files should use extract-audio task first
  */
 export function asrNormalize(args: AsrNormalizeType, task: Task) {
-  const outputFile = `${task.code}_normalized.wav`;
+  const outputFile = `${task.file_id}_asr_normalized.wav`;
 
   return handleS3DownAndUpSwap({
     task,
@@ -377,7 +377,6 @@ export function asrNormalize(args: AsrNormalizeType, task: Task) {
  */
 export function asrAnalyze(args: AsrAnalyzeType, task: Task) {
   const outputFile = `${task.code}_analysis.json`;
-
   return handleS3DownAndUpAppend({
     task,
     outputFile,

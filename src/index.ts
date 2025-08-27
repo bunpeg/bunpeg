@@ -667,7 +667,6 @@ const server = serve({
                 file_id: args.file_id,
                 audio_format: 'wav',
                 mode: 'replace',
-                parent: args.parent,
               }
             });
           }
@@ -680,7 +679,6 @@ const server = serve({
               args: {
                 file_id: args.file_id,
                 mode: 'append',
-                parent: args.parent,
               }
             },
             {
@@ -692,7 +690,6 @@ const server = serve({
                 min_segment_duration: args.min_segment_duration,
                 silence_threshold: args.silence_threshold,
                 silence_duration: args.silence_duration,
-                parent: args.parent,
               }
             },
             {
@@ -700,7 +697,6 @@ const server = serve({
               file_id: args.file_id,
               args: {
                 file_id: args.file_id,
-                parent: args.parent,
               }
             }
           );

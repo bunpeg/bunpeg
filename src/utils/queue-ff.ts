@@ -68,13 +68,28 @@ async function executePass() {
     // console.log('tasks', tasks.map(t => ({ id: t.id, operation: t.operation })));
     if (tasks.length === 0) return;
 
-    for (const task of tasks) {
-      void startTask(task);
+    /**
+     * scan the tasks to run for duplicate file_ids and remove them
+     * the type `Map<string, number>` represents `Map<file_id, task_id>`
+     */
+    const temp_record = new Map<string, number>();
+    for (const t of tasks) {
+      if (!temp_record.has(t.file_id)) {
+        temp_record.set(t.file_id, t.id);
+      }
+    }
+
+    const temp_task_ids = Array.from(temp_record.values());
+    const single_tasks = tasks.filter(t => temp_task_ids.includes(t.id));
+
+
+    for (const task of single_tasks) {
+      void start_task(task);
     }
   }
 }
 
-async function startTask(task: Task) {
+async function start_task(task: Task) {
   logQueueMessage(`Picking up task: ${task.id} to ${task.operation}`);
   updateTask(task.id, { status: 'processing' });
   activeTasks.add(task.id);
@@ -83,6 +98,7 @@ async function startTask(task: Task) {
   const { error: operationError } = await tryCatch(runOperation(task));
   if (operationError) {
     await updateTask(task.id, { status: "failed", error: operationError.message });
+    // await updateTask(task.id, { status: "failed", error: encodeURI(operationError.message) });
     await markPendingTasksForFileAsUnreachable(task.file_id);
     logQueueError(`Failed to process task: ${task.id}`, operationError);
   } else {

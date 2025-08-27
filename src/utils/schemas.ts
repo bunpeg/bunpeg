@@ -146,8 +146,6 @@ export const AsrParams = z.object({
   min_segment_duration: z.number().min(10).max(90).default(30),
   silence_threshold: z.string().default("-40dB"),
   silence_duration: z.number().default(0.5),
-  mode: mode.default('append'),
-  parent: parentId,
 });
 
 export const AsrSchema = AsrParams.extend({ file_id: fileId });
