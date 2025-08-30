@@ -2,9 +2,6 @@ import { tryCatch } from './promises.ts';
 import { getNextPendingTasks, markPendingTasksForFileAsUnreachable, type Task, updateTask } from './tasks.ts';
 import {
   addAudioTrack,
-  asrAnalyze,
-  asrNormalize,
-  asrSegment,
   cutEnd,
   extractAudio,
   extractThumbnail,
@@ -14,14 +11,9 @@ import {
   resizeVideo,
   transcode,
   trim,
-  visionAnalyze,
-  visionSegment,
 } from './ffmpeg.ts';
 import {
   AddAudioTrackSchema,
-  AsrAnalyzeSchema,
-  AsrNormalizeSchema,
-  AsrSegmentSchema,
   CutEndSchema,
   DashSchema,
   ExtractAudioSchema,
@@ -31,8 +23,6 @@ import {
   ResizeVideoSchema,
   TranscodeSchema,
   TrimSchema,
-  VisionAnalyzeSchema,
-  VisionSegmentSchema,
 } from './schemas.ts';
 
 const MAX_CONCURRENT_TASKS = Number(process.env.MAX_CONCURRENT_TASKS);
@@ -186,41 +176,6 @@ async function runOperation(task: Task) {
       if (!parsed.success) throw new Error(`Invalid merge-media args: ${JSON.stringify(parsed.error.issues)}`);
       const args = parsed.data;
       await generateDashFiles(args, task);
-    } break;
-
-    case 'asr-normalize': {
-      const parsed = AsrNormalizeSchema.safeParse(JSON.parse(jsonArgs));
-      if (!parsed.success) throw new Error(`Invalid asr-normalize args: ${JSON.stringify(parsed.error.issues)}`);
-      const args = parsed.data;
-      await asrNormalize({ ...args, file_id: task.file_id }, task);
-    } break;
-
-    case 'asr-analyze': {
-      const parsed = AsrAnalyzeSchema.safeParse(JSON.parse(jsonArgs));
-      if (!parsed.success) throw new Error(`Invalid asr-analyze args: ${JSON.stringify(parsed.error.issues)}`);
-      const args = parsed.data;
-      await asrAnalyze({ ...args, file_id: task.file_id }, task);
-    } break;
-
-    case 'asr-segment': {
-      const parsed = AsrSegmentSchema.safeParse(JSON.parse(jsonArgs));
-      if (!parsed.success) throw new Error(`Invalid asr-segment args: ${JSON.stringify(parsed.error.issues)}`);
-      const args = parsed.data;
-      await asrSegment({ ...args, file_id: task.file_id }, task);
-    } break;
-
-    case 'vision-analyze': {
-      const parsed = VisionAnalyzeSchema.safeParse(JSON.parse(jsonArgs));
-      if (!parsed.success) throw new Error(`Invalid vision-analyze args: ${JSON.stringify(parsed.error.issues)}`);
-      const args = parsed.data;
-      await visionAnalyze({ ...args, file_id: task.file_id }, task);
-    } break;
-
-    case 'vision-segment': {
-      const parsed = VisionSegmentSchema.safeParse(JSON.parse(jsonArgs));
-      if (!parsed.success) throw new Error(`Invalid vision-segment args: ${JSON.stringify(parsed.error.issues)}`);
-      const args = parsed.data;
-      await visionSegment({ ...args, file_id: task.file_id }, task);
     } break;
 
     default:

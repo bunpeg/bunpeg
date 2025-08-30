@@ -140,63 +140,6 @@ export const ExtractThumbnailParams = z.object({
 export const ExtractThumbnailSchema = ExtractThumbnailParams.extend({ file_id: fileId });
 export type ExtractThumbnailType = z.infer<typeof ExtractThumbnailSchema>;
 
-// ASR (Speech-to-Text Preparation) schemas
-export const AsrParams = z.object({
-  max_segment_duration: z.number().min(30).max(180).default(120),
-  min_segment_duration: z.number().min(10).max(90).default(30),
-  silence_threshold: z.string().default("-40dB"),
-  silence_duration: z.number().default(0.5),
-});
-
-export const AsrSchema = AsrParams.extend({ file_id: fileId });
-export type AsrType = z.infer<typeof AsrSchema>;
-
-// Internal ASR operation schemas (NOT exposed to users)
-export const AsrNormalizeSchema = z.object({
-  file_id: fileId,
-  parent: parentId,
-});
-export type AsrNormalizeType = z.infer<typeof AsrNormalizeSchema>;
-
-export const AsrAnalyzeSchema = z.object({
-  file_id: fileId,
-  max_segment_duration: z.number(),
-  min_segment_duration: z.number(),
-  silence_threshold: z.string(),
-  silence_duration: z.number(),
-  parent: parentId,
-});
-export type AsrAnalyzeType = z.infer<typeof AsrAnalyzeSchema>;
-
-export const AsrSegmentSchema = z.object({
-  file_id: fileId,
-  parent: parentId,
-});
-export type AsrSegmentType = z.infer<typeof AsrSegmentSchema>;
-
-// Vision Chunks schemas
-export const VisionParams = z.object({
-  scene_threshold: z.number().min(0).max(1).default(0.4),
-  parent: parentId,
-});
-
-export const VisionSchema = VisionParams.extend({ file_id: fileId });
-export type VisionType = z.infer<typeof VisionSchema>;
-
-// Internal Vision operation schemas (NOT exposed to users)
-export const VisionAnalyzeSchema = z.object({
-  file_id: fileId,
-  scene_threshold: z.number().min(0).max(1),
-  parent: parentId,
-});
-export type VisionAnalyzeType = z.infer<typeof VisionAnalyzeSchema>;
-
-export const VisionSegmentSchema = z.object({
-  file_id: fileId,
-  parent: parentId,
-});
-export type VisionSegmentType = z.infer<typeof VisionSegmentSchema>;
-
 // Union for chained operation
 export const ChainOperationSchema = z.union([
   TrimParams.extend({ type: z.literal("trim") }),
@@ -232,11 +175,6 @@ export type Operations =
   | RemoveAudioType
   | MergeMediaType
   | ExtractThumbnailType
-  | DashType
-  | AsrNormalizeType
-  | AsrAnalyzeType
-  | AsrSegmentType
-  | VisionAnalyzeType
-  | VisionSegmentType;
+  | DashType;
 
-export type OperationName = ChainType['operations'][number]['type'] | 'add-audio' | 'merge-media' | 'dash' | 'asr-normalize' | 'asr-analyze' | 'asr-segment' | 'vision-analyze' | 'vision-segment';
+export type OperationName = ChainType['operations'][number]['type'] | 'add-audio' | 'merge-media' | 'dash';
